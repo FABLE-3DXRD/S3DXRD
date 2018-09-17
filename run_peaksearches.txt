@@ -1,0 +1,13 @@
+
+Runs peaksearch on a series of folders created by ftomo.
+
+Reads a file called "scans_to_process.txt" that has the list of
+folders to process
+
+
+
+TODO:
+*	Some parameters are hardwired at the top of the script	
+*	Add merging of thresholds
+
+
