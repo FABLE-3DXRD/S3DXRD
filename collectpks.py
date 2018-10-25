@@ -29,6 +29,9 @@ def get_dty( flt, motor='dty' ):
                 names = line.split()
                 if vals is not None:
                     return float(vals[ names.index( motor ) ])
+    for item in flt.split("_"):
+        if item[0] == 'y':
+            return int(item[1:])
     print( "Missed finding dty for",flt)
     return 0
                     
@@ -69,11 +72,12 @@ if __name__=="__main__":
             print(help)
             print("File exists already, try again")
         
-        sys.exit()
+
     except:
         print(help)
-        sys.exit()
+        raise
+
         
-    c = merge_flts( p, sorted(sys.argv[4:]) )
+    c = merge_flts( p, sorted(sys.argv[4:]), motor )
     colfile_to_hdf( c, out )
     
