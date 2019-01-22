@@ -1,0 +1,55 @@
+         9812606 function calls in 33.015 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    6.815    6.815   33.015   33.015 find_refl.py:69(run)
+   176418    7.072    0.000    9.738    0.000 find_refl.py:350(find_omega_general)
+   394350    4.220    0.000    7.075    0.000 find_refl.py:422(det_coor)
+   173272    3.779    0.000    4.938    0.000 find_refl.py:447(calc_int_mod)
+  3325850    4.112    0.000    4.112    0.000 {numpy.core.multiarray.dot}
+  2008501    3.055    0.000    3.055    0.000 {numpy.core.multiarray.array}
+   176418    0.990    0.000    1.164    0.000 tools.py:955(tth2)
+   173272    0.079    0.000    0.955    0.000 fromnumeric.py:2803(round_)
+   173272    0.160    0.000    0.876    0.000 fromnumeric.py:2734(around)
+   173393    0.122    0.000    0.856    0.000 fromnumeric.py:49(_wrapfunc)
+   125708    0.237    0.000    0.829    0.000 fromnumeric.py:64(_wrapreduction)
+   176418    0.605    0.000    0.605    0.000 {zip}
+   125708    0.567    0.000    0.567    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+   173272    0.534    0.000    0.534    0.000 {method 'round' of 'numpy.generic' objects}
+    62854    0.069    0.000    0.483    0.000 fromnumeric.py:2227(amax)
+    62854    0.068    0.000    0.482    0.000 fromnumeric.py:2337(amin)
+  1608913    0.213    0.000    0.213    0.000 {method 'append' of 'list' objects}
+      121    0.000    0.000    0.140    0.001 fromnumeric.py:882(argsort)
+      121    0.139    0.001    0.139    0.001 {method 'argsort' of 'numpy.ndarray' objects}
+   173514    0.061    0.000    0.061    0.000 {getattr}
+   176418    0.038    0.000    0.038    0.000 check_input.py:18(interrupt)
+   222737    0.036    0.000    0.036    0.000 {abs}
+   125708    0.025    0.000    0.025    0.000 {method 'items' of 'dict' objects}
+      121    0.001    0.000    0.013    0.000 tools.py:566(epsilon_to_b)
+      121    0.003    0.000    0.006    0.000 linalg.py:468(inv)
+      121    0.003    0.000    0.006    0.000 tools.py:288(form_b_mat)
+      242    0.004    0.000    0.004    0.000 tools.py:266(cell_volume)
+      242    0.002    0.000    0.002    0.000 {numpy.core.multiarray.arange}
+      121    0.001    0.000    0.001    0.000 {method 'flush' of 'file' objects}
+      121    0.001    0.000    0.001    0.000 linalg.py:141(_commonType)
+      121    0.000    0.000    0.001    0.000 linalg.py:108(_makearray)
+      123    0.001    0.000    0.001    0.000 {print}
+      121    0.000    0.000    0.000    0.000 {method 'astype' of 'numpy.ndarray' objects}
+      121    0.000    0.000    0.000    0.000 linalg.py:103(get_linalg_error_extobj)
+      121    0.000    0.000    0.000    0.000 numeric.py:433(asarray)
+      121    0.000    0.000    0.000    0.000 linalg.py:200(_assertRankAtLeast2)
+      242    0.000    0.000    0.000    0.000 linalg.py:113(isComplexType)
+      121    0.000    0.000    0.000    0.000 linalg.py:211(_assertNdSquareness)
+      121    0.000    0.000    0.000    0.000 linalg.py:126(_realType)
+      121    0.000    0.000    0.000    0.000 variables.py:20(__init__)
+      121    0.000    0.000    0.000    0.000 {numpy.core.multiarray.zeros}
+      363    0.000    0.000    0.000    0.000 {issubclass}
+      121    0.000    0.000    0.000    0.000 {method 'index' of 'list' objects}
+      242    0.000    0.000    0.000    0.000 {len}
+      121    0.000    0.000    0.000    0.000 {method '__array_prepare__' of 'numpy.ndarray' objects}
+      121    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {range}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+

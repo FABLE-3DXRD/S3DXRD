@@ -207,15 +207,20 @@ def findpairs_2d( cf, dangle, omestep, fac = 1.5, pairs=False):
     w = cf.parameters.get('wavelength')
     d_ds = np.radians(dangle) / w
     print("Converting dangle",dangle, "degrees to",d_ds, "ds_tol")
+    # Take into account the sign of eta to split left/right
+    #  ... e.g. avoid mergin 180 degree pairs
+    cf.ds[:] *= np.sign( cf.eta )
     ctotal = 0
     clusters = []
     for p,h in enumerate(hits):
         nc, cli = clusterpeaks( cf, h, d_ds )
         ctotal += nc
-        clusters +=  cli 
+        clusters +=  cli
+        #print(p, nc, cli)
         if p % 100 == 0:
             print("%8d %.2f"%( p, 100*p/len(hits)) , end="\r" )
     nhit = np.zeros( cf.nrows, np.intc )
+    cf.ds[:] = np.abs( cf.ds )
     for cl in clusters:
         nhit[cl]+=1
     isolated = (nhit == 0)
@@ -437,7 +442,7 @@ def main():
 
 
 if __name__=="__main__":
-        main()
+    main()
 
 
         

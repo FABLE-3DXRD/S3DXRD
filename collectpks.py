@@ -13,11 +13,23 @@ Args: parfile y-motor outfile.hdf [flts]
 It gets the y-motor from the corresponding spt file
 
 Adds a column in the output called dty with y motor position
+
 """
 
 
 def get_dty( flt, motor='dty' ):
-    with open( flt[:-3]+"spt",  "r") as sptfile:
+    """
+    best case : reads spt file for motor name (motor_pos line)
+    without that file looks for _yXXXpXXX_ in filename
+    failing that it returns 0
+    """
+    sptfile = flt[:-3]+"spt"
+    if not os.path.exists( sptfile ):
+        for item in flt.split("_"):
+            if item[0] == 'y':
+                return float(item[1:].replace("p","."))
+        return 0
+    with open( sptfile,  "r") as sptfile:
         vals = None
         names = None
         for line in sptfile.readlines():
@@ -29,13 +41,12 @@ def get_dty( flt, motor='dty' ):
                 names = line.split()
                 if vals is not None:
                     return float(vals[ names.index( motor ) ])
-    print( "Missed finding dty for",flt)
-    return 0
                     
 
 
 def merge_flts( p, flts, motor ):
     ars = []
+    titles = None
     for f in flts:
         try:
             c = columnfile(f)
@@ -52,6 +63,11 @@ def merge_flts( p, flts, motor ):
             print (ones( c.nrows) * dty)
             raise
         c.updateGeometry( p )
+        if titles is None:
+            titles = [t for t in c.titles]
+        for told, tnew in zip( titles, c.titles ):
+            assert told == tnew, "titles do not match %s %s %s"%(
+                f,told,tnew)
         ars.append( c.bigarray )
     c.bigarray = concatenate( ars, axis=1 )
     c.nrows = c.bigarray.shape[1]
@@ -69,11 +85,12 @@ if __name__=="__main__":
             print(help)
             print("File exists already, try again")
         
-        sys.exit()
+
     except:
         print(help)
-        sys.exit()
+        raise
+
         
-    c = merge_flts( p, sorted(sys.argv[4:]) )
+    c = merge_flts( p, sorted(sys.argv[4:]), motor )
     colfile_to_hdf( c, out )
     
