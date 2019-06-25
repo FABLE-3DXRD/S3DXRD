@@ -1,8 +1,0 @@
-Here are some bonus scripts that could be useful.
-
-profileModelScanning3DXRD.py is for accurate profiling of ModelScanning3DXRD.py
-You need to set up the file paths before you can use it. Just open the scripts and insert the proper strings.
-The output is saved in the profileReports folder.
-
-voxelatedGrain.py is for producing input files in a streamlined way.
-
