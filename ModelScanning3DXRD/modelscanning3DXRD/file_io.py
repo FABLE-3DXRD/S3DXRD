@@ -13,13 +13,115 @@ import sys
 
 A_id = variables.refarray().A_id
 
-def write_flt(param,voxel):
+
+
+def write_merged_flt(param,merged_peaks):
     """
      Write filtered peaks (flt) file, for format see
      http://fable.wiki.sourceforge.net/imaged11+-+file+formats
     """
 
-    filename = '%s/%s.flt' %(param['direc'],param['stem'])
+    filename = '%s/%s%s.flt' %(param['direc'],'merged_peaks_',param['stem'])
+
+    with open(filename,'w') as f:
+
+        out = '#  sc  fc  omega  Number_of_pixels  avg_intensity  s_raw  f_raw  sigs  sigf  covsf  sigo  covso  covfo  sum_intensity  sum_intensity^2  IMax_int  IMax_s  IMax_f  IMax_o  Min_s  Max_s  Min_f  Max_f  Min_o  Max_o  dety  detz  onfirst  onlast  spot3d_id  labels  tth_per_voxel  eta_per_voxel  h  k  l dty\n'
+        f.write(out)
+        out = ''
+        #Local implementation of detecter.detyz_to_xy() for speed
+        #--------------------------------------------------------
+        if abs(param['o11']) == 1:
+            if (abs(param['o22']) != 1) or (param['o12'] != 0) or (param['o21'] != 0):
+                raise ValueError('detector orientation makes no sense 1')
+        elif abs(param['o12']) == 1:
+            if abs(param['o21']) != 1 or (param['o11'] != 0) or (param['o22'] != 0):
+                raise ValueError('detector orientation makes no sense 2')
+        else:
+            raise ValueError('detector orientation makes no sense 3')
+
+        omat = n.array([[param['o11'], param['o12']],
+                        [param['o21'], param['o22']]])
+        omat = n.linalg.inv(omat)
+        det_size = n.array([param['detz_size']-1,
+                            param['dety_size']-1])
+        term2 = n.clip(n.dot(omat, det_size),-n.max(det_size), 0)
+        def detyz_to_xy(coor,omat,det_size,term2):
+            coor = n.array([coor[1], coor[0]])
+            coor = n.dot(omat, coor) - term2
+            return coor
+        #-------------------------------------------------------------
+        #    format = "%f "*3 + "%i "*1 +"%f "*12 + "%i "*2   +"%f "*1 + "%i "*4 +"%f "*4 + "%i "*3+"\n"
+        format = "%f "*3 + "%i "*1 +"%f "*12 + "%i "*2   +"%f "*1 + "%i "*4 +"%f "*4 + "%i "*4 +"%f "*2 + "%i "*3 + "%f "*1 +"\n"
+
+        for peak in merged_peaks:
+            (sc, fc) = detector.detyz_to_xy([peak[A_id['dety']],peak[A_id['detz']]],
+                                            param['o11'],
+                                            param['o12'],
+                                            param['o21'],
+                                            param['o22'],
+                                            param['dety_size'],
+                                            param['detz_size'])
+            if param['spatial'] == None:
+                sr = sc
+                fr = fc
+            else:
+                (sr, fr) = detector.detyz_to_xy([peak[A_id['detyd']],peak[A_id['detzd']]],
+                                                param['o11'],
+                                                param['o12'],
+                                                param['o21'],
+                                                param['o22'],
+                                                param['dety_size'],
+                                                param['detz_size'])
+            out = out + (format %(sc,
+                        fc,
+                        peak[A_id['omega']]*180/n.pi,
+                        peak[A_id['Number_of_pixels']],
+                        peak[A_id['Int']]/peak[A_id['Number_of_pixels']],
+                        sr,
+                        fr,
+                        1,
+                        1,
+                        0,
+                        1,
+                        0,
+                        0,
+                        peak[A_id['Int']],
+                        (peak[A_id['Int']]/25)**2, #best estimate of sum_i I_i^2
+                        peak[A_id['Int']]/10,
+                        sc,
+                        fc,
+                        peak[A_id['omega']]*180/n.pi,
+                        sc-2,
+                        sc+2,
+                        fc-2,
+                        fc+2,
+                        peak[A_id['omega']]*180/n.pi-param['omega_step'],
+                        peak[A_id['omega']]*180/n.pi+param['omega_step'],
+                        peak[A_id['dety']],
+                        peak[A_id['detz']],
+                        0,
+                        0,
+                        peak[A_id['spot_id']],
+                        peak[A_id['voxel_id']],
+                        peak[A_id['tth']],
+                        peak[A_id['eta']],
+                        peak[A_id['h']],
+                        peak[A_id['k']],
+                        peak[A_id['l']],
+                        peak[A_id['dty']]
+                        ) )
+        f.write(out)
+
+def write_delta_flt(param,voxel):
+    if not memory_safety_check(param):
+        return
+
+    """
+     Write filtered peaks (flt) file, for format see
+     http://fable.wiki.sourceforge.net/imaged11+-+file+formats
+    """
+
+    filename = '%s/%s%s.flt' %(param['direc'],'delta_peaks_',param['stem'])
 
     with open(filename,'w') as f:
 
@@ -103,8 +205,8 @@ def write_flt(param,voxel):
                 out = out + (format %(sc,
                             fc,
                             A[i,A_id['omega']]*180/n.pi,
-                            25,
-                            A[i,A_id['Int']]/25,
+                            A[i,A_id['Number_of_pixels']],
+                            A[i,A_id['Int']]/A[i,A_id['Number_of_pixels']],
                             sr,
                             fr,
                             1,
@@ -253,7 +355,9 @@ def write_fcf(param,hkl):
             f.write('\n')
 
 
-def write_gve(param,voxel,hkl):
+def write_delta_gve(param,voxel,hkl):
+    if not memory_safety_check(param):
+        return
     """
     Write gvector (gve) file, for format see
     http://fable.wiki.sourceforge.net/imaged11+-+file+formats
@@ -292,9 +396,9 @@ def write_gve(param,voxel,hkl):
 
     for phase in param['phase_list']:
         if param['no_phases'] > 1:
-            filename = '%s/%s_phase_%i.gve' %(param['direc'],param['stem'],phase)
+            filename = '%s/%s%s_phase_%i.gve' %(param['direc'],'delta_peaks_',param['stem'],phase)
         else:
-            filename = '%s/%s.gve' %(param['direc'],param['stem'])
+            filename = '%s/%s%s.gve' %(param['direc'],'delta_peaks_',param['stem'])
 
         with open(filename,'w') as f:
             lattice = param['sgname_phase_%i' %phase][0]
@@ -352,7 +456,7 @@ def write_gve(param,voxel,hkl):
             # as whoever tries to read such a file to RAM will get a
             # nasty suprise. Perhaps a better solution is to write several .flt files
             # Anyway, this should not be a problem once peakmerging is implemented
-            
+
             if param['no_voxels']>100:
                 collected_voxels = 0
                 ranges = []
@@ -748,4 +852,15 @@ def write_ubi(param):
             f.write(out)
 
 
-
+def memory_safety_check(param):
+    if param['no_voxels']<250:
+        return True
+    else:
+        print("WARNING")
+        print("---------------------------------------------------------")
+        print("It is not safe to write delta peaks to file")
+        print("for this many voxels. The files will be to large")
+        print("Make do with the merged .flt or if you are bold and")
+        print("have a lot of RAM remove this code and try to use delta peaks")
+        print("---------------------------------------------------------")
+        return False

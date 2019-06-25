@@ -14,7 +14,7 @@ logics of somebody elses.
 '''
 
 import numpy as n
-from modelscanning3DXRD import generate_grains as gg
+from modelscanning3DXRD import generate_voxels as gg
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
 from xfab import tools
@@ -27,7 +27,8 @@ BASE=r'''
 direc 'Sn'
 stem 'Sn_ssch'
 make_image 0
-output  '.edf' '.flt' '.gve' '.par' '.ubi'
+output  'merged.flt' 'delta.flt' 'delta.gve' '.par' '.ubi'
+#output  'merged.flt' '.par' '.ubi'
 structure_phase_0 '/home/axel/workspace/scanning-3dxrd-simulations/ModelScanning3DXRD/scripts/simul/Sn.cif'
 y_size 0.0500
 z_size 0.0500
@@ -44,18 +45,20 @@ o22 -1
 noise 0
 intensity_const 1
 lorentz_apply 1
-beampol_apply 1
+beampol_apply 0
 peakshape 0
 wavelength 0.21878
 beamflux 1e-12
 beampol_factor 1
 beampol_direct 0
-dety_center 1048.20100238
+dety_center 998.798998
 detz_center 1041.55049636
 omega_start 0
 omega_end 180
 omega_step 1.0
 omega_sign 1
+theta_min 0
+theta_max 8
 wedge -0.0142439915706
 #spatial '/home/axel/workspace/fable/ModelScanning3DXRD/scripts/simul/frelon4m.spline'
 '''
@@ -63,7 +66,7 @@ wedge -0.0142439915706
 class Voxel(object):
     '''
     A Voxel is acosiated with a single crystalographic orientation in space
-    defined by  the orientation matrix U.
+    defined by the orientation matrix U.
     '''
     def __init__(self, voxelId, grainNo, size, x,y,z,U=None,strain=None):
 
@@ -155,7 +158,8 @@ class SliceFactory(object):
         yOrig = -0.5*y*voxelSize+0.5*voxelSize
         zOrig = -0.5*z*voxelSize+0.5*voxelSize
         a_slice = Slice([],shape="square")
-        U = self.generate_U(crystal_system)
+        U = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        #U = self.generate_U(crystal_system)
         Id = 0
         for i in range(0,x,1):
             xCurr = xOrig + i*voxelSize
@@ -170,7 +174,101 @@ class SliceFactory(object):
                     a_slice.addVoxel(voxel)
         return a_slice
 
-    def testFunction(self, x, y, z, voxelSize, crystal_system):
+    def TwoGrainSlice(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        U1 = n.array([[-0.158282, -0.986955, 0.029458],
+                        [-0.929214, 0.158978, 0.333597],
+                        [-0.333929, 0.025430, -0.942255]])
+        # U2 = n.array([[0.861031141, -0.350285857, 0.368680340],
+        #               [0.504660772, 0.499018829, -0.704484005],
+        #               [0.062792352, 0.792641171, 0.606446283]])
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+
+        Id = 0
+        c_vox = int(n.floor(x/2.))
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    if (i<=1 and j<=1):
+                        voxel = Voxel(Id,1, voxelSize, xCurr, yCurr, zCurr, U1)
+                    else:
+                        voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign)
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+    def offsetSquare(self, x, y, z, voxelSize, crystal_system):
+
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+
+        dx=dy=voxelSize*110
+        xOrig = xOrig - dx
+        yOrig = yOrig - dy
+
+        a_slice = Slice([],shape="square")
+        U1 = n.array([[-0.158282, -0.986955, 0.029458],
+                        [-0.929214, 0.158978, 0.333597],
+                        [-0.333929, 0.025430, -0.942255]])
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        Id = 0
+        c_vox = int(n.floor(x/2.))
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign)
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+    def gridOfgrains(self, x, y, z, voxelSize, crystal_system):
+
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+
+        #make a line grid of grains with size equal to y*2
+        grain_size = voxelSize*x
+
+        U = n.array([[-0.158282, -0.986955, 0.029458],
+                        [-0.929214, 0.158978, 0.333597],
+                        [-0.333929, 0.025430, -0.942255]])
+        Id=0
+        a_slice = Slice([],shape="square")
+        s = SliceFactory()
+        grain_nbr = 0
+        #for q in range(0,x,1):
+        for p in range(0,5,1):
+            grain_nbr += 1
+            #dx = -2*grain_size + 2*q*grain_size
+            dx = 0
+            dy = p*grain_size + p*1*voxelSize
+            dz = 0
+            U = s.randRot(U,n.pi/6.,n.pi/6)
+            c_vox = int(n.floor(x/2.))
+            for i in range(0,x,1):
+                xCurr = xOrig + i*voxelSize + dx
+                for j in range(0,y,1):
+                    yCurr = yOrig + j*voxelSize + dy
+                    for k in range(0,z,1):
+                        zCurr = zOrig + k*voxelSize + dz
+                        voxel = Voxel(Id,grain_nbr, voxelSize, xCurr, yCurr, zCurr, U)
+                        print(n.round(xCurr*1000), n.round(yCurr*1000), n.round(zCurr*1000))
+                        Id=Id+1
+                        a_slice.addVoxel(voxel)
+        return a_slice
+
+    def localStrain(self, x, y, z, voxelSize, crystal_system):
         xOrig = -0.5*x*voxelSize+0.5*voxelSize
         yOrig = -0.5*y*voxelSize+0.5*voxelSize
         zOrig = -0.5*z*voxelSize+0.5*voxelSize
@@ -193,14 +291,147 @@ class SliceFactory(object):
                 yCurr = yOrig + j*voxelSize
                 for k in range(0,z,1):
                     zCurr = zOrig + k*voxelSize
-                    # # if i==0 and j==0:
-                    # #     voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, U, strain=epsZero)
-                    # if i==x-1 and j==y-1:
-                    #     voxel = Voxel(Id,1, voxelSize, xCurr, yCurr, zCurr, U0, strain=epsZero)
-                    # # if (i>=c_vox-1 and i<=c_vox+1) and (j>=c_vox-1 and j<=c_vox+1):
-                    # #     voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=eps)
-                    # else:
-                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=epsZero)
+                    if i>1 and j>1 and i<4 and j<4:
+                        #strain in central voxel only
+                        voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=eps)
+                    else:
+                        voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=epsZero)
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
+
+    def roundGrain(self, x, y, z, voxelSize, crystal_system):
+
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6)) #[mean_diag, spread_diag, mean_ofdiag, spread_ofdiag]
+        epsZero = n.zeros((1,6))
+        Id = 0
+        c_vox = int(n.floor(x/2.))
+
+
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+
+                    # spread = 0.5
+                    # U = self.randRot(Ualign,0,spread)
+
+                    # U = Ualign.copy()
+                    # U = ((-0.2)+(2*0.2*float(j/(y-1.0))))/100.0
+                    # 1 degree rotation around each axis in x gradient
+                    phi1 = n.radians( 0.25*float(i/(y-1.0)) )
+                    PHI = n.radians( 0.25*float(i/(y-1.0))  )
+                    phi2 = n.radians( 0.25*float(i/(y-1.0)) )
+                    U = tools.euler_to_u( phi1, PHI, phi2 )
+
+                    print( float(j/(y-1.0)) )
+                    print(U)
+                    print()
+
+                    if n.sqrt( xCurr*xCurr+yCurr*yCurr ) < abs(xOrig):
+                        
+                        eps[0,0] = ((-0.2)+(2*0.2*float(j/(y-1.0))))/100.0
+
+                        # We need to transform to still have a gradient in lab frame..
+                        eps33 = n.zeros((3,3))
+                        eps33[0,0] = eps[0,0]
+                        eps33[0,1] = eps[0,1]
+                        eps33[0,2] = eps[0,2]
+                        eps33[1,0] = eps33[0,1]
+                        eps33[1,1] = eps[0,3]
+                        eps33[2,1] = eps[0,4]
+                        eps33[2,2] = eps[0,5]
+
+                        eps33[1,2] = eps33[2,1]
+                        eps33[2,0] = eps33[0,2]
+
+                        epsCrystal = n.dot( n.dot( n.transpose(U), eps33 ), U )
+
+                        # eps11 eps12 eps13 eps22 eps23 eps33 (X is an integer number)
+                        epsC = n.zeros((1,6))
+                        epsC[0,0] = epsCrystal[0,0]
+                        epsC[0,1] = epsCrystal[0,1]
+                        epsC[0,2] = epsCrystal[0,2]
+                        epsC[0,3] = epsCrystal[1,1]
+                        epsC[0,4] = epsCrystal[1,2]
+                        epsC[0,5] = epsCrystal[2,2]
+
+                        voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, U.copy(), strain=eps.copy())
+                        Id=Id+1
+                        a_slice.addVoxel(voxel)
+        
+        return a_slice
+
+    def x_rot(self, U, ang):
+        c = n.cos(n.radians(ang))
+        s = n.cos(n.radians(ang))
+        return n.dot( n.array([[1,0,0],[0,c,-s],[0,s,c]]), U )
+
+    def y_rot(self, U, ang):
+        c = n.cos(n.radians(ang))
+        s = n.cos(n.radians(ang))
+        return n.dot( n.array([[c,0,s],[0,1,0],[-s,0,c]]), U )
+
+    def z_rot(self, U, ang):
+        c = n.cos(n.radians(ang))
+        s = n.cos(n.radians(ang))
+        return n.dot( n.array([[c,-s,0],[s,c,0],[0,0,1]]), U )
+
+
+
+
+    def testFunction(self, x, y, z, voxelSize, crystal_system):
+        x = 2*x
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize - 4*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize + 8*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6)) #[mean_diag, spread_diag, mean_ofdiag, spread_ofdiag]
+        epsZero = n.zeros((1,6))
+        Id = 0
+        c_vox = int(n.floor(x/2.))
+
+        forbidden = n.array([[0,0],[0,1],[1,0]])
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+
+                    skip=False
+                    for a,b in forbidden:
+                        if i==a and j==b:
+                            skip=True
+                    if skip: continue
+                    #eps_grains__X_ eps11 eps12 eps13 eps22 eps23 eps33 (X is an integer number)
+
+                    eps[0,0] = ((-0.2)+(2*0.2*float(i/(x-1.0))))/100.0 #eps_xx
+                    eps[0,1] = ((-0.15)+(2*0.15*float(i/(x-1.0))))/100.0 #eps_xy
+                    eps[0,2] = ((-0.17)+(2*0.17*float(i/(x-1.0))))/100.0 #eps_xz
+                    eps[0,3] = ((-0.3)+(2*0.3*float(i/(x-1.0))))/100.0 #eps_yy
+                    eps[0,4] = ((-0.35)+(2*0.35*float(i/(x-1.0))))/100.0 #eps_yz
+                    eps[0,5] = ((-0.1)+(2*0.1*float(j/(y-1.0))))/100.0 #eps_zz
+                    #print(eps[0,5])
+                    # grad_neg_start=0.2
+                    # eps[0,0] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_xx
+                    # eps[0,1] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_xy
+                    # eps[0,2] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_xz
+                    # eps[0,3] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_yy
+                    # eps[0,4] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_yz
+                    # eps[0,5] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_zz
+
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=eps.copy())
                     Id=Id+1
                     a_slice.addVoxel(voxel)
         return a_slice
@@ -222,6 +453,53 @@ class SliceFactory(object):
                     zCurr = zOrig + k*voxelSize
                     eps[0,0] = ((-2.0)+(4.0*float(j/(y-1.0))))/100.0
                     #print(eps[0,0])
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=eps.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+    def ContGradientYstrainXX(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        grad_neg_start = 0.1
+        Id = 0
+        c_vox = int(n.floor(x/2.))
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    eps[0,0] = ((-grad_neg_start)+(2*grad_neg_start*float(j/(y-1.0))))/100.0
+                    #print(eps[0,0])
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=eps.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+    def ContGradientXstrainXX(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        Id = 0
+        grad_neg_start = 0.1
+        c_vox = int(n.floor(x/2.))
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    eps[0,0] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    #print(eps[0,0])
+                    #eps[0,0]=0
                     voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, zCurr, Ualign, strain=eps.copy())
                     Id=Id+1
                     a_slice.addVoxel(voxel)
@@ -543,8 +821,16 @@ class SliceFactory(object):
         xOrig = -0.5*x*voxelSize+0.5*voxelSize
         yOrig = -0.5*y*voxelSize+0.5*voxelSize
         zOrig = -0.5*z*voxelSize+0.5*voxelSize
-        U1 = self.generate_U(crystal_system)
-        U2 = self.generate_U(crystal_system)
+        U1 = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        #U2 = self.generate_U(crystal_system)
+        thetaZ = n.radians(20)
+        thetaX = n.radians(20)
+        cZ, sZ = n.cos(thetaZ), n.sin(thetaZ)
+        cX, sX = n.cos(thetaX), n.sin(thetaX)
+        Rz = n.array([[cZ,-sZ,0],[sZ,cZ,0],[0,0,1]])
+        Rx = n.array([[1,0,0],[0,cX,-sX],[0,sX,cX]])
+        Urotated = Rz.dot(Rx.dot(U1))
+        U2 = Urotated
         grainNo=0
         a_slice = Slice([],shape="square")
         Id = 0
@@ -583,11 +869,14 @@ class SliceFactory(object):
                     zCurr = zOrig + k*voxelSize
                     if j>=y/2.:
                         U = U1
+                        print("U1 at: ", xCurr, yCurr)
                         grainNo=0
                     elif i>=x/2.:
+                        print("U2 at: ", xCurr, yCurr)
                         U = U2
                         grainNo=1
                     else:
+                        print("U3 at: ", xCurr, yCurr)
                         U = U3
                         grainNo=2
                     voxel = Voxel(Id,grainNo, voxelSize, xCurr, yCurr, zCurr,U)
@@ -631,6 +920,194 @@ class SliceFactory(object):
                     a_slice.addVoxel(voxel)
         return a_slice
 
+
+    def OneGrain2Strains(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        U = n.eye(3,3)
+        grainNo=0
+        eps1 = n.zeros((1,6))
+        eps1[0,0]=0.001
+        eps2 = n.zeros((1,6))
+        eps2[0,0]=-0.001
+        a_slice = Slice([],shape="square")
+        Id = 0
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    if j>=y/2.:
+                        eps = eps1
+                    else:
+                        eps = eps2
+                    voxel = Voxel(Id,grainNo, voxelSize, xCurr, yCurr, zCurr,U,strain=eps)
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
+
+
+    def Aligned_xxStrainGrads(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize + 5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize + 10*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        Id = 0
+        grad_neg_start = 0.2
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    eps[0,0] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, 0, Ualign, strain=eps.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
+    def Aligned_NoStrainGrads(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize #- 10*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize #- 5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        Id = 0
+        grad_neg_start = 0.2
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, 0, Ualign, strain=eps.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
+
+    def Aligned_StrainGrads(self, x, y, z, voxelSize, crystal_system):
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        Id = 0
+        grad_neg_start = 0.2
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+
+                    #eps_grains__X_ eps11 eps12 eps13 eps22 eps23 eps33 (X is an integer number)
+
+                    eps[0,0] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_xx
+                    eps[0,1] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_xy
+                    eps[0,2] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_xz
+                    eps[0,3] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_yy
+                    eps[0,4] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_yz
+                    eps[0,5] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0 #eps_zz
+
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, 0, Ualign, strain=eps.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
+    def Aligned_StrainGrads_MosaicSpread(self, x, y, z, voxelSize, crystal_system):
+
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        Id = 0
+        grad_neg_start = 0.2
+        c_vox = int(n.floor(x/2.))
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    eps[0,0] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    eps[0,1] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    eps[0,2] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    eps[0,3] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    eps[0,4] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    eps[0,5] = ((-grad_neg_start)+(2*grad_neg_start*float(i/(x-1.0))))/100.0
+                    spread = 0.05
+                    U = self.randRot(Ualign,0,spread)
+
+                    # We need to transform to still have a gradient in lab frame..
+                    eps33 = n.zeros((3,3))
+                    eps33[0,0] = eps[0,0]
+                    eps33[0,1] = eps[0,1]
+                    eps33[0,2] = eps[0,2]
+                    eps33[1,0] = eps33[0,1]
+                    eps33[1,1] = eps[0,3]
+                    eps33[2,1] = eps[0,4]
+                    eps33[2,2] = eps[0,5]
+
+                    eps33[1,2] = eps33[2,1]
+                    eps33[2,0] = eps33[0,2]
+
+                    epsCrystal = n.dot( n.dot( n.transpose(U), eps33 ), U )
+
+                    # eps11 eps12 eps13 eps22 eps23 eps33 (X is an integer number)
+                    epsC = n.zeros((1,6))
+                    epsC[0,0] = epsCrystal[0,0]
+                    epsC[0,1] = epsCrystal[0,1]
+                    epsC[0,2] = epsCrystal[0,2]
+                    epsC[0,3] = epsCrystal[1,1]
+                    epsC[0,4] = epsCrystal[1,2]
+                    epsC[0,5] = epsCrystal[2,2]
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, 0, U, strain=epsC.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
+
+
+    def Aligned_MosaicSpread(self, x, y, z, voxelSize, crystal_system):
+
+        xOrig = -0.5*x*voxelSize+0.5*voxelSize
+        yOrig = -0.5*y*voxelSize+0.5*voxelSize
+        zOrig = -0.5*z*voxelSize+0.5*voxelSize
+        a_slice = Slice([],shape="square")
+        Ualign = n.array([[1,0,0],[0,1,0],[0,0,1]])
+        eps = n.zeros((1,6))
+        Id = 0
+        grad_neg_start = 0.1
+        c_vox = int(n.floor(x/2.))
+        for i in range(0,x,1):
+            xCurr = xOrig + i*voxelSize
+            for j in range(0,y,1):
+                yCurr = yOrig + j*voxelSize
+                for k in range(0,z,1):
+                    zCurr = zOrig + k*voxelSize
+                    spread = 0.05
+                    U = self.randRot(Ualign,0,spread)
+                    voxel = Voxel(Id,0, voxelSize, xCurr, yCurr, 0, U, strain=eps.copy())
+                    Id=Id+1
+                    a_slice.addVoxel(voxel)
+        return a_slice
+
+
     def ThreeOrientRomboidSliceWithMosaicSpreadAndStrainGradients(self, x, y, z, voxelSize, crystal_system,spread=1):
         xOrig = -0.5*x*voxelSize+0.5*voxelSize
         yOrig = -0.5*y*voxelSize+0.5*voxelSize
@@ -667,33 +1144,35 @@ class SliceFactory(object):
                     a_slice.addVoxel(voxel)
         return a_slice
 
-    def generate_U(self,crystal_system):
-	    # copy paste
-        # crystal_system can be one of the following values
-        # 1: Triclinic
-        # 2: Monoclinic
-        # 3: Orthorhombic
-        # 4: Tetragonal
-        # 5: Trigonal
-        # 6: Hexagonal
-        # 7: Cubic
-        U = n.zeros((3,3))
-        Urot = n.zeros((3,3))
-        tilt_z = n.random.rand()*2*n.pi
-        tilt_y = n.arcsin(n.random.rand())
-        tilt_x  = n.pi*(2*n.random.rand()*n.pi-1)
-        U = tools.detect_tilt(tilt_x, tilt_y, tilt_z)
-        t = 0
-        Ut = U.copy()
-        rot = symmetry.rotations(crystal_system)
-        for j in range(len(rot)):
-            Urot = n.dot(U,rot[j])
-            trace = Urot.trace()
-            if trace > t:
-                t = trace
-                Ut = Urot
-        U = Ut
-        return U
+
+# seeems broken?
+    # def generate_U(self,crystal_system):
+	#     # copy paste
+    #     # crystal_system can be one of the following values
+    #     # 1: Triclinic
+    #     # 2: Monoclinic
+    #     # 3: Orthorhombic
+    #     # 4: Tetragonal
+    #     # 5: Trigonal
+    #     # 6: Hexagonal
+    #     # 7: Cubic
+    #     U = n.zeros((3,3))
+    #     Urot = n.zeros((3,3))
+    #     tilt_z = n.random.rand()*2*n.pi
+    #     tilt_y = n.arcsin(n.random.rand())
+    #     tilt_x  = n.pi*(2*n.random.rand()*n.pi-1)
+    #     U = tools.detect_tilt(tilt_x, tilt_y, tilt_z)
+    #     t = 0
+    #     Ut = U.copy()
+    #     rot = symmetry.rotations(crystal_system)
+    #     for j in range(len(rot)):
+    #         Urot = n.dot(U,rot[j])
+    #         trace = Urot.trace()
+    #         if trace > t:
+    #             t = trace
+    #             Ut = Urot
+    #     U = Ut
+    #     return U
 
 
 
@@ -780,22 +1259,41 @@ if __name__ == "__main__":
     #a_slice = slice_factory.randomoOrientRomboidSliceWithStrainGradient(no_voxels,no_voxels,1,voxel_size,4)
     #a_slice = slice_factory.checkerOrientRomboidSlice(no_voxels,no_voxels,1,voxel_size,4)
     #a_slice = slice_factory.TwoOrientRomboidSlice(no_voxels,no_voxels,1,voxel_size,4)
-    a_slice = slice_factory.ThreeOrientRomboidSlice(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.ThreeOrientRomboidSlice(no_voxels,no_voxels,1,voxel_size,4)
     #a_slice = slice_factory.ThreeOrientRomboidSliceWithStrain(no_voxels,no_voxels,1,voxel_size,4)
     #a_slice = slice_factory.HighResTwoOrientRomboidSlice(no_voxels,no_voxels,1,voxel_size,4)
     #a_slice = slice_factory.randomoOrientRomboidSliceWithMosaicSpread(no_voxels,no_voxels,1,voxel_size,4,spread=(1/3.))
     #a_slice = slice_factory.ThreeOrientRomboidSliceWithMosaicSpreadAndStrainGradients(no_voxels,no_voxels,1,voxel_size,4,spread=(1/3.))
 
+    #Simultaneous fitting
+    #a_slice = slice_factory.Aligned_StrainGrads_MosaicSpread(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.Aligned_MosaicSpread(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.Aligned_StrainGrads(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.Aligned_NoStrainGrads(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.Aligned_xxStrainGrads(no_voxels,no_voxels,1,voxel_size,4)
+
+    #a_slice= slice_factory.localStrain(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.OneGrain2Strains(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.ContGradientXstrainXX(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.ContGradientYstrainXX(no_voxels,no_voxels,1,voxel_size,4)
+
+    #Investigate CMS corrections
+    #a_slice = slice_factory.TwoGrainSlice(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.offsetSquare(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.gridOfgrains(no_voxels,no_voxels,1,voxel_size,4)
+
     #Put tests in this function
-    #a_slice = slice_factory.testFunction(no_voxels,no_voxels,1,voxel_size,4)
+    # a_slice = slice_factory.testFunction(no_voxels,no_voxels,1,voxel_size,4)
+
+    #Round "contact strain grain"
+    a_slice = slice_factory.roundGrain(no_voxels,no_voxels,1,voxel_size,4)
 
 
     #Gradient investigations
     #------------------------------------------------------------------------------
-
     # strain in xx direction
     #a_slice = slice_factory.GradientYstrainXX(no_voxels,no_voxels,1,voxel_size,4)
-    a_slice = slice_factory.GradientXstrainXX(no_voxels,no_voxels,1,voxel_size,4)
+    #a_slice = slice_factory.GradientXstrainXX(no_voxels,no_voxels,1,voxel_size,4)
 
     # strain in yy direction
     #a_slice = slice_factory.GradientXstrainYY(no_voxels,no_voxels,1,voxel_size,4)
@@ -804,7 +1302,6 @@ if __name__ == "__main__":
     # strain in xx crystal system and rotation 45 degrees The tsrain is 45 to the gradient
     #a_slice = slice_factory.GradientYstrainXXGrainrotation(no_voxels,no_voxels,1,voxel_size,4)
     #a_slice = slice_factory.GradientXstrainXXGrainrotation(no_voxels,no_voxels,1,voxel_size,4)
-
 
     # strain in xx sample system and rotation 45 degrees The strain is 0 or 90 to the gradient
     #a_slice = slice_factory.GradientYstrainXXSamplerotation(no_voxels,no_voxels,1,voxel_size,4)
