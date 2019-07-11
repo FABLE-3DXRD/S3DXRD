@@ -10,11 +10,11 @@ miller planes are computed for.
 
 from __future__ import absolute_import
 from __future__ import print_function
-import numpy as n
+import numpy as np
 from xfab import tools
 from xfab import detector
 from xfab.structure import int_intensity
-from . import variables,check_input,file_io
+from . import variables,check_input,file_io,cms_peak_compute,convexPolygon
 import sys
 from shapely.geometry import Polygon
 import pylab as pl
@@ -34,8 +34,8 @@ class find_refl:
         self.voxel = [None]*self.param['no_voxels']
 
         # Simple transforms of input and set constants
-        self.K = -2*n.pi/self.param['wavelength']
-        self.S = n.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
+        self.K = -2*np.pi/self.param['wavelength']
+        self.S = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
 
         # Detector tilt correction matrix
         self.R = tools.detect_tilt(self.param['tilt_x'],
@@ -46,16 +46,16 @@ class find_refl:
         # The sign is reversed for wedge as the parameter in
         # tools.find_omega_general is right handed and in ImageD11
         # it is left-handed (at this point wedge is defined as in ImageD11)
-        self.wy = -1.*self.param['wedge']*n.pi/180.
+        self.wy = -1.*self.param['wedge']*np.pi/180.
         self.wx = 0.
 
-        w_mat_x = n.array([[1, 0        , 0         ],
-                           [0, n.cos(self.wx), -n.sin(self.wx)],
-                           [0, n.sin(self.wx),  n.cos(self.wx)]])
-        w_mat_y = n.array([[ n.cos(self.wy), 0, n.sin(self.wy)],
+        w_mat_x = np.array([[1, 0        , 0         ],
+                           [0, np.cos(self.wx), -np.sin(self.wx)],
+                           [0, np.sin(self.wx),  np.cos(self.wx)]])
+        w_mat_y = np.array([[ np.cos(self.wy), 0, np.sin(self.wy)],
                            [0         , 1, 0        ],
-                           [-n.sin(self.wy), 0, n.cos(self.wy)]])
-        self.r_mat = n.dot(w_mat_x,w_mat_y)
+                           [-np.sin(self.wy), 0, np.cos(self.wy)]])
+        self.r_mat = np.dot(w_mat_x,w_mat_y)
 
         # Spatial distortion
         if self.param['spatial'] != None:
@@ -64,6 +64,9 @@ class find_refl:
 
         # %No of images
         self.nframes = (self.param['omega_end']-self.param['omega_start'])/self.param['omega_step']
+
+
+        self.peak_merger = cms_peak_compute.PeakMerger( self.param )
 
 
     def run(self, start_voxel, end_voxel, log=True, parallel=None):
@@ -79,6 +82,13 @@ class find_refl:
                parallel:    Flag to indicate parallel mode. Such a mode requires that we pass the result
                             of the run to the calling process.
         '''
+        self.param['lorentz_apply']=1
+
+
+        tth_lower_bound = self.param['two_theta_lower_bound']*np.pi/180.
+        tth_upper_bound = self.param['two_theta_upper_bound']*np.pi/180.
+
+
         spot_id = 0
 
         # Compute used quanteties once for speed
@@ -86,10 +96,10 @@ class find_refl:
         # Don't make static dictonary calls in loop, slower..
         no_voxels = self.param['no_voxels']
         beam_width = self.param['beam_width']
-        omega_start = self.param['omega_start']*n.pi/180
-        omega_end = self.param['omega_end']*n.pi/180
+        omega_start = self.param['omega_start']*np.pi/180
+        omega_end = self.param['omega_end']*np.pi/180
         wavelength = self.param['wavelength']
-        scale_Gw = wavelength/(4.*n.pi)
+        scale_Gw = wavelength/(4.*np.pi)
         detz_center = self.param['detz_center']
         dety_center = self.param['dety_center']
         z_size = self.param['z_size']
@@ -98,16 +108,26 @@ class find_refl:
         wavelength = self.param['wavelength']
 
 
-        w = beam_width/2.
-        #beam_length = 10000000 + 10*beam_width*no_voxels*no_voxels # just make sure this is large enough
-        #Dx = n.array([w,0,0])
-        #Dy = n.array([0,w,0])
-        voxel_area = beam_width**2
-        #---------------------------------------------
-
         if log==True:
             print('no of voxels ',no_voxels)
         # print(start_voxel, end_voxel)
+        # with open('solution','w') as f:
+        #     for voxel_nbr in range(start_voxel, end_voxel):
+        #         if len(self.param['phase_list']) == 1:
+        #             phase = self.param['phase_list'][0]
+        #         else:
+        #             phase = self.param['phase_voxels_%s' %(self.param['voxel_list'][voxel_nbr])]
+        #         unit_cell = self.param['unit_cell_phase_%i' %phase]
+        #         U = self.param['U_voxels_%s' %(self.param['voxel_list'][voxel_nbr])]
+        #         voxel_eps = np.array(self.param['eps_voxels_%s' %(self.param['voxel_list'][voxel_nbr])])
+        #         B = tools.epsilon_to_b(voxel_eps,unit_cell)
+        #         UB = np.dot(U,B)
+        #         ub = UB.ravel()
+        #         f.write("np.array([")
+        #         for val in ub:
+        #             f.write(str(val)+", ")
+        #         f.write("])\n")
+        # raise
         for voxel_nbr in range(start_voxel, end_voxel):
             A = []
             U = self.param['U_voxels_%s' %(self.param['voxel_list'][voxel_nbr])]
@@ -117,110 +137,89 @@ class find_refl:
                 phase = self.param['phase_voxels_%s' %(self.param['voxel_list'][voxel_nbr])]
             unit_cell = self.param['unit_cell_phase_%i' %phase]
             self.voxel[voxel_nbr] = variables.voxel_cont(U)
-            voxel_pos = n.array(self.param['pos_voxels_%s' %(self.param['voxel_list'][voxel_nbr])])
-            voxel_eps = n.array(self.param['eps_voxels_%s' %(self.param['voxel_list'][voxel_nbr])])
+            voxel_pos = np.array(self.param['pos_voxels_%s' %(self.param['voxel_list'][voxel_nbr])])
+            voxel_eps = np.array(self.param['eps_voxels_%s' %(self.param['voxel_list'][voxel_nbr])])
             # Calculate the B-matrix based on the strain tensor for each voxel
             B = tools.epsilon_to_b(voxel_eps,unit_cell)
             # add B matrix to voxel container
             self.voxel[voxel_nbr].B = B
             V = tools.cell_volume(unit_cell)
-            voxel_vol = n.pi/6 * self.param['size_voxels_%s' %self.param['voxel_list'][voxel_nbr]]**3
+            voxel_vol = np.pi/6 * self.param['size_voxels_%s' %self.param['voxel_list'][voxel_nbr]]**3
             nrefl = 0
-            for hkl in self.hkl[self.param['phase_list'].index(phase)]:
-                check_input.interrupt(self.killfile)
-                Gc = n.dot(B,hkl[0:3])
-                Gw = n.dot(self.S,n.dot(U,Gc))
-                tth = tools.tth2(Gw,wavelength)
-                costth = n.cos(tth)
-                (Omega, Eta, Omega_mat, Gts) = self.find_omega_general(Gw*scale_Gw,scale_Gw,tth)
-                for omega,eta,Om,Gt in zip(Omega, Eta, Omega_mat, Gts):
-                    if  omega_start < omega and omega < omega_end:
 
+            for hkl in self.hkl[self.param['phase_list'].index(phase)]:
+
+                check_input.interrupt(self.killfile)
+                Gc = np.dot(B,hkl[0:3])
+                Gw = np.dot(self.S,np.dot(U,Gc))
+                # if hkl[0]==0 and hkl[1]==-2 and hkl[2]==0:
+                #     print(np.dot(U,B))
+                #     print(hkl[0:3])
+                #     print(Gw)
+                #     raise
+                tth = tools.tth2(Gw,wavelength)
+
+                # If specified in input file do not compute for two
+                # thetaoutside range [tth_lower_bound, tth_upper_bound]
+                # if tth_upper_bound<tth or tth<tth_lower_bound :
+                #     continue
+
+                costth = np.cos(tth)
+                (Omega, Eta, Omega_mat, Gts) = self.find_omega_general(Gw*scale_Gw,scale_Gw,tth)
+
+                for omega,eta,Om,Gt in zip(Omega, Eta, Omega_mat, Gts):
+
+                    if  omega_start < omega and omega < omega_end:
+                        #print(np.degrees(omega))
                         # Calc crystal position at present omega
-                        [tx,ty,tz]= n.dot(Om,voxel_pos)
+                        [tx,ty,tz]= np.dot(Om,voxel_pos)
 
                         #The 3 beam y positions that could illuminate the voxel
-                        beam_centre_1 = n.round(ty/beam_width)*beam_width
+                        beam_centre_1 = np.round(ty/beam_width)*beam_width
                         beam_centre_0 = beam_centre_1+beam_width
                         beam_centre_2 = beam_centre_1-beam_width
 
                         #Compute precentual voxel beam overlap for the three regions
-                        int_mod_0,int_mod_1,int_mod_2 = self.calc_int_mod(omega,tx,ty,beam_width,voxel_area,beam_centre_0,beam_centre_1,beam_centre_2)
+                        overlaps_info = convexPolygon.compute_voxel_beam_overlap(tx,ty,omega,beam_centre_1, beam_width)
 
-                        # Debug code. Something like this can be used to check if calc_int_mod() is sound
-                        # If you want to improve calc_int_mod() this is usefull, so I will leave it here for now
-                        # The idea is to use Shapelys polygon package as a reference calculation.
-                        #-----------------------------------------------------------------------
-                        #Compute voxel as polygon
-                        # [tx1,ty1,tz1]= n.dot(Om,voxel_pos+Dx+Dy)
-                        # [tx2,ty2,tz2]= n.dot(Om,voxel_pos+Dx-Dy)
-                        # [tx3,ty3,tz3]= n.dot(Om,voxel_pos-Dx-Dy)
-                        # [tx4,ty4,tz4]= n.dot(Om,voxel_pos-Dx+Dy)
-                        # voxel = Polygon([(tx1,ty1), (tx2,ty2), (tx3,ty3), (tx4,ty4)])
-                        #Compute edge beams as polygons
-                        # beam_0 = Polygon([(beam_length,beam_centre_0+w), (-beam_length,beam_centre_0+w), (-beam_length,beam_centre_0-w), ((beam_length,beam_centre_0-w))])
-                        # beam_2 = Polygon([(beam_length,beam_centre_2+w), (-beam_length,beam_centre_2+w), (-beam_length,beam_centre_2-w), ((beam_length,beam_centre_2-w))])
-
-                        #Compute intensity modifiers based on percentual voxel-beam overlap
-                        #i.e int_mod_0+int_mod_1+int_mod_2 = 1
-                        # int_mod_0 = voxel.intersection(beam_0).area/voxel_area
-                        # int_mod_2 = voxel.intersection(beam_2).area/voxel_area
-                        # int_mod_1 = 1 - int_mod_0 - int_mod_2
-
-                        #Temporary sanity check
-                        # tol = 0.0001
-                        # error = n.array([int_0,int_1,int_2])-n.array([int_mod_0,int_mod_1,int_mod_2])
-                        # if n.abs(error[0])>tol or n.abs(error[1])>tol or n.abs(error[2])>tol:
-                        #     print("ERROR!")
-                        #     print(error)
-                        #     print("omega",omega)
-                        #     print("ty ",ty)
-                        #     print("Shapely: ",[int_mod_0,int_mod_1,int_mod_2])
-                        #     print("AXEL: ",[int_0,int_1,int_2])
-                        #     raise KeyboardInterrupt
-
-                        #beam_1 = Polygon([(beam_length,beam_centre_1+w), (-beam_length,beam_centre_1+w), (-beam_length,beam_centre_1-w), ((beam_length,beam_centre_1-w))])
-                        #plots the detected overlaps
-                        # for j,reg in enumerate([[beam_0,int_mod_0],[beam_1,int_mod_1],[beam_2,int_mod_2]]):
-                        #     beam = reg[0]
-                        #     intensity_modifier = reg[1]
-                        #     vox_x,vox_y = voxel.exterior.xy
-                        #     beam_x,beam_y = beam.exterior.xy
-                        #     pl.figure()
-                        #     pl.plot(vox_x,vox_y)
-                        #     pl.plot(beam_x,beam_y)
-                        #     pl.axis('equal')
-                        #     pl.axis([tx1-5*w, tx1+5*w, ty1-4*w, ty1+4*w])
-                        #     pl.title("for beam nbr "+str(j)+", int_mod = "+str(intensity_modifier))
-                        #     pl.show()
-                        # print(beam_width)
-                        # print("Voxel number: "+str(voxel_nbr))
-                        # print("Voxel coordinate: "+str(tx)+","+str(ty))
-                        # print("Omega: "+str(omega))
-                        # print(beam_centre_0,beam_centre_1,beam_centre_2)
-                        #-----------------------------------------------------------------
-
-                        regions = [ [int_mod_0,beam_centre_0], [int_mod_1,beam_centre_1], [int_mod_2,beam_centre_2] ]
-                        for region in regions:
+                        regions = [ beam_centre_0, beam_centre_1,beam_centre_2]
+                        for beam_centre_y,info in zip(regions,overlaps_info):
 
                             # perhaps we should have a less restrictive
-                            # comparision here, like: if region[0]<0.01,
+                            # comparision here, like: if intensity_modifier<0.0001,
                             # there is some possibilty to simulate nosie here
 
-                            dty = region[1]*1000. # beam cetre in microns
-                            intensity_modifier = region[0]
+                            intensity_modifier = info[0]
 
-                            # If no unit cells where activated we continue
                             if intensity_modifier==0:
                                 continue
 
-                            #TODO:
-                            # Perhaps we should fix this so that the peak is
-                            # not calculated for voxel centre but from the
-                            # illuminated parts cms. On the other hand, it will
-                            # hardly ever matter if we are considering the resolution
-                            # of the detector.
 
+                            #Lorentz factor
+                            if self.param['lorentz_apply'] == 1:
+                                if eta != 0:
+                                    L=1/(np.sin(tth)*abs(np.sin(eta)))
+                                else:
+                                    L=np.inf;
+                            else:
+                                L = 1.0
+
+                            intensity = L*intensity_modifier*hkl[3]
+
+                            # If no unit cells where activated we continue
+
+                            dty = beam_centre_y*1000. # beam cetre in microns
+                            cx = info[1]
+                            cy = info[2]
+
+
+                            # Compute peak based on cms of illuminated voxel fraction
+                            tx = cx
+                            ty = cy - beam_centre_y # The sample moves not the beam!
+                            # print("tx",tx)
+                            # print("ty",ty)
+                            # print("")
+                            tz = 0
                             (dety, detz) = self.det_coor(Gt,
                                                         costth,
                                                         wavelength,
@@ -238,6 +237,7 @@ class find_refl:
                             (-0.5 > detz) or\
                             (detz > self.param['detz_size']-0.5):
                                 continue
+
 
                             if self.param['spatial'] != None :
                                 # To match the coordinate system of the spline file
@@ -261,35 +261,44 @@ class find_refl:
                             else:
                                 detyd = dety
                                 detzd = detz
+
+
+
                             if self.param['beampol_apply'] == 1:
                                 #Polarization factor (Kahn, J. Appl. Cryst. (1982) 15, 330-337.)
-                                rho = n.pi/2.0 + eta + self.param['beampol_direct']*n.pi/180.0
+                                rho = np.pi/2.0 + eta + self.param['beampol_direct']*np.pi/180.0
                                 P = 0.5 * (1 + costth*costth -\
-                                        self.param['beampol_factor']*n.cos(2*rho)*n.sin(tth)**2)
+                                        self.param['beampol_factor']*np.cos(2*rho)*np.sin(tth)**2)
                             else:
                                 P = 1.0
-                            #Lorentz factor
-                            if self.param['lorentz_apply'] == 1:
-                                if eta != 0:
-                                    L=1/(n.sin(tth)*abs(n.sin(eta)))
-                                else:
-                                    L=n.inf;
-                            else:
-                                L = 1.0
 
                             overlaps = 0 # set the number overlaps to zero
 
-                            if self.param['intensity_const'] != 1:
-                                intensity = intensity_modifier*int_intensity(hkl[3],
-                                                                            L,
-                                                                            P,
-                                                                            self.param['beamflux'],
-                                                                            self.param['wavelength'],
-                                                                            V,
-                                                                            voxel_vol)
+                            # if self.param['intensity_const'] != 1:
+                            #     intensity = intensity_modifier*int_intensity(hkl[3],
+                            #                                                 L,
+                            #                                                 P,
+                            #                                                 self.param['beamflux'],
+                            #                                                 self.param['wavelength'],
+                            #                                                 V,
+                            #                                                 voxel_vol)
 
-                            else:
-                                intensity = intensity_modifier*hkl[3]
+                            # else:
+                            #     intensity = intensity_modifier*hkl[3]
+
+
+
+                            #TODO: try and build up the images as we go
+                            # Mapp reflection to the correct image
+
+                            self.peak_merger.add_reflection_to_images([self.param['voxel_list'][voxel_nbr],
+                                                        nrefl,spot_id,
+                                                        hkl[0],hkl[1],hkl[2],
+                                                        tth,omega,eta,
+                                                        dety,detz,
+                                                        detyd,detzd,
+                                                        Gw[0],Gw[1],Gw[2],
+                                                        L,P,hkl[3],intensity,overlaps,dty,1])
 
                             A.append([self.param['voxel_list'][voxel_nbr],
                                     nrefl,spot_id,
@@ -298,31 +307,34 @@ class find_refl:
                                     dety,detz,
                                     detyd,detzd,
                                     Gw[0],Gw[1],Gw[2],
-                                    L,P,hkl[3],intensity,overlaps,dty])
+                                    L,P,hkl[3],intensity,overlaps,dty,1])
                             nrefl = nrefl+1
 
                             #TODO: When run in parallel the spot id might be duplicated..
+                            #but who cares about spot id anyways huh..
                             spot_id = spot_id+1
 
-            A = n.array(A)
 
-            if len(A) > 0:
-                # sort rows according to omega
-                A = A[n.argsort(A,0)[:,A_id['omega']],:]
+            # A = np.array(A)
 
-                # Renumber the reflections
-                A[:,A_id['ref_id']] = n.arange(nrefl)
+            # if len(A) > 0:
+            #     # sort rows according to omega
+            #     A = A[np.argsort(A,0)[:,A_id['omega']],:]
 
-                # Renumber the spot_id
-                A[:,A_id['spot_id']] = n.arange(n.min(A[:,A_id['spot_id']]),
-                                            n.max(A[:,A_id['spot_id']])+1)
-            else:
-                A = n.zeros((0,len(A_id)))
+            #     # Renumber the reflections
+            #     A[:,A_id['ref_id']] = np.arange(nrefl)
+
+            #     # Renumber the spot_id
+            #     A[:,A_id['spot_id']] = np.arange(np.min(A[:,A_id['spot_id']]),
+            #                                 np.max(A[:,A_id['spot_id']])+1)
+            # else:
+            #     A = np.zeros((0,len(A_id)))
 
             # save reflection info in voxel container, if we are not in parallel mode this
             # will be the same object that we ran the run() method upon. Otherwise it is by
             # defualt a copy of that object and we will need to pass the result to the calling
             # process at the end of the algorithm
+
             self.voxel[voxel_nbr].refs = A
 
             if parallel and log==True:
@@ -336,14 +348,22 @@ class find_refl:
         if log==True:
             print('\n')
 
-        # if we are running in parrallel the memory cannot be shared
-        # so wee need to return our result in order to merge all results
+
+        # if we are running in parrallel the memory cannot be shared (easily)
+        # so wee return our result in order to merge all results
         # into a single find_refl.py Object.
+
         if parallel:
             result = {"start_voxel": start_voxel,
                       "end_voxel": end_voxel,
                       "refl_list": self.voxel}
             return result
+        else:
+            # if not in parallel we may merge here
+            # this allows us to include analyse_images_as_clusters()
+            # easy in profiling
+            self.peak_merger.analyse_images_as_clusters()
+
 
 
 
@@ -362,7 +382,7 @@ class find_refl:
 
         a = g_w[0]*self.r_mat[0][0] + g_w[1]*self.r_mat[0][1]
         b = g_w[0]*self.r_mat[1][0] - g_w[1]*self.r_mat[0][0]
-        c = - n.dot(g_w, g_w) - g_w[2]*self.r_mat[0][2]
+        c = - np.dot(g_w, g_w) - g_w[2]*self.r_mat[0][2]
         d = a*a + b*b - c*c
 
         omega = []
@@ -375,8 +395,8 @@ class find_refl:
         else:
             # Compute numbers that are reused twice for speed
             #-------------------------------------------------
-            sq_d = n.sqrt(d)
-            sinfact = 2/n.sin(twoth)
+            sq_d = np.sqrt(d)
+            sinfact = 2/np.sin(twoth)
             ac = a*c
             bc = b*c
             bsqd = b*sq_d
@@ -384,39 +404,39 @@ class find_refl:
 
             # Find Omega number 0
             #-------------------------------------------------
-            omega.append(n.arctan2((bc - asqd), (ac + bsqd)))
-            if omega[0] > n.pi:
-                omega[0] = omega[0] - 2*n.pi
+            omega.append(np.arctan2((bc - asqd), (ac + bsqd)))
+            if omega[0] > np.pi:
+                omega[0] = omega[0] - 2*np.pi
 
-            cosOm = n.cos(omega[0])
-            sinOm = n.sin(omega[0])
-            omega_mat.append(n.dot(self.r_mat,n.array([[cosOm, -sinOm,  0],
+            cosOm = np.cos(omega[0])
+            sinOm = np.sin(omega[0])
+            omega_mat.append(np.dot(self.r_mat,np.array([[cosOm, -sinOm,  0],
                                                        [sinOm,  cosOm,  0],
                                                        [  0,  0  ,  1]])))
-            g_t = n.dot(omega_mat[0], g_w)
+            g_t = np.dot(omega_mat[0], g_w)
             sineta = -g_t[1]*sinfact
             coseta =  g_t[2]*sinfact
-            eta.append(n.arctan2(sineta, coseta))
+            eta.append(np.arctan2(sineta, coseta))
             Gt.append(g_t/scale_Gw)
 
             #Find omega number 1
             #-------------------------------------------------
-            omega.append(n.arctan2((bc + asqd), (ac - bsqd)))
-            if omega[1] > n.pi:
-                omega[1] = omega[1] - 2*n.pi
-            cosOm = n.cos(omega[1])
-            sinOm = n.sin(omega[1])
-            omega_mat.append(n.dot(self.r_mat,n.array([[cosOm, -sinOm,  0],
+            omega.append(np.arctan2((bc + asqd), (ac - bsqd)))
+            if omega[1] > np.pi:
+                omega[1] = omega[1] - 2*np.pi
+            cosOm = np.cos(omega[1])
+            sinOm = np.sin(omega[1])
+            omega_mat.append(np.dot(self.r_mat,np.array([[cosOm, -sinOm,  0],
                                                        [sinOm,  cosOm,  0],
                                                        [  0,  0  ,  1]])))
-            g_t = n.dot(omega_mat[1], g_w)
+            g_t = np.dot(omega_mat[1], g_w)
             sineta = -g_t[1]*sinfact
             coseta =  g_t[2]*sinfact
-            eta.append(n.arctan2(sineta, coseta))
+            eta.append(np.arctan2(sineta, coseta))
             Gt.append(g_t/scale_Gw)
             #-------------------------------------------------
 
-        return n.array(omega), n.array(eta), omega_mat, Gt
+        return np.array(omega), np.array(eta), omega_mat, Gt
 
 
     def det_coor(self, Gt, costth, wavelength, distance, y_size, z_size,
@@ -436,120 +456,12 @@ class find_refl:
         """
 
         # Unit directional vector for reflection
-        v = n.array([costth, wavelength/(2*n.pi)*Gt[1], wavelength/(2*n.pi)*Gt[2]])
-        t = (R_tilt[0, 0]*distance - n.dot(R_tilt[:, 0],n.array([tx, ty, tz])))/n.dot(R_tilt[:, 0],v)
-        Ltv = n.array([tx-distance, ty, tz])+ t*v
-        dety = n.dot(R_tilt[:, 1],Ltv)/y_size + dety_center
-        detz = n.dot(R_tilt[:, 2],Ltv)/z_size + detz_center
+        v = np.array([costth, wavelength/(2*np.pi)*Gt[1], wavelength/(2*np.pi)*Gt[2]])
+        t = (R_tilt[0, 0]*distance - np.dot(R_tilt[:, 0],np.array([tx, ty, tz])))/np.dot(R_tilt[:, 0],v)
+        Ltv = np.array([tx-distance, ty, tz])+ t*v
+        dety = np.dot(R_tilt[:, 1],Ltv)/y_size + dety_center
+        detz = np.dot(R_tilt[:, 2],Ltv)/z_size + detz_center
         return [dety, detz]
-
-
-    def calc_int_mod(self,omega,tx,ty,beam_width,v_area,bcy0,bcy1,bcy2):
-        '''
-        Compute intensity modifiers based on voxel beam overlap
-        for the specific case of a square voxel and infinite rectangle
-        beam. This method is meant to be faster than any geometry
-        package for general polygons such as shapely and the like.
-        e.g.
-
-        |       |       |       |
-        |    |||||||    |       |
-        |    |||||||    |       |
-        |    |||||||    |       |
-        |region0|region1|region2|
-        |       |       |       |
-        => return 0.5, 0.5, 0
-
-        Output: percentual overlap between voxel and the three
-                beam regions possibly grazing the voxel:
-                overlap leftmost region, overlap centre region, overlap rightmost resion
-
-        '''
-
-        alpha = omega - (n.pi/2.)*n.floor((omega/(n.pi/2.)))
-        cos_neg = n.cos((n.pi/4.)-alpha)
-        cos_pos = n.cos((n.pi/4.)+alpha)
-        sin_neg = n.sin((n.pi/4.)-alpha)
-        sin_pos = n.sin((n.pi/4.)+alpha)
-        tan_factor = 0.5*(n.tan( alpha ) + n.tan( (n.pi/2.) - alpha ))
-        diag = beam_width/n.sqrt(2)
-        a = [-diag*cos_neg, diag*sin_neg]
-        b = [diag*cos_pos, diag*sin_pos]
-        c = [-a[0],-a[1]]
-        d = [-b[0],-b[1]]
-
-        int_mod_0=0
-        int_mod_1=0
-        int_mod_2=0
-
-        if (-a[0]+ty)>(bcy1+beam_width*0.5):
-
-            # a pertrudes bcy0
-            if (-c[0]+ty)<(bcy1-beam_width*0.5):
-
-                # Triangles in bcy0 and bcy2 with central hexagon in bc0
-                xl = ty-(bcy1+beam_width*0.5)
-                xr = ty-(bcy1-beam_width*0.5)
-                Area_left_triangle = tan_factor*(xl+diag*cos_neg)*(xl+diag*cos_neg)
-                Area_right_triangle = tan_factor*(diag*cos_neg-xr)*(diag*cos_neg-xr)
-                Area_central_hexagon = v_area - Area_left_triangle - Area_right_triangle
-                int_mod_0 = Area_left_triangle/v_area
-                int_mod_1 = Area_central_hexagon/v_area
-                int_mod_2 = Area_right_triangle/v_area
-            else:
-
-
-                # Tetragons in bcy0 and bcy1 or triangle and pentagon. Nothing in bcy2!
-                xl_r = ty-(bcy1+beam_width*0.5)
-                if alpha<(n.pi/4.):
-                # b to the right of d
-                    xl_t = n.min( n.array([d[0], ty-(bcy1+beam_width*0.5)]) )
-                    #if alpha equals zero identicaly the computer cannot handle the limit as tan_fact=>inf
-                    if alpha!=0:
-                        Area_left_romboid = 2*tan_factor*(xl_t+diag*cos_neg)*(xl_r-xl_t)
-                    else:
-                        Area_left_romboid = (xl_r-xl_t)*beam_width
-                else:
-                # b to the left of d
-                    xl_t = n.min( n.array([b[0], ty-(bcy1+beam_width*0.5)]) )
-                    Area_left_romboid = 2*tan_factor*(xl_t+diag*cos_neg)*(xl_r-xl_t)
-                Area_left_triangle = tan_factor*(xl_t+diag*cos_neg)*(xl_t+diag*cos_neg)
-                Area_left_polygon = Area_left_triangle+Area_left_romboid#to much
-                Area_right_polygon = v_area - Area_left_polygon
-                int_mod_0 = Area_left_polygon/v_area
-                int_mod_1 = Area_right_polygon/v_area
-                int_mod_2 = 0
-        else:
-            # c pertrudes bcy2 (or alpha=0)
-            # Tetragons in bcy1 and bcy2 or pentagon and triangle. Nothing in bcy0!
-            if (-c[0]+ty)<(bcy1-beam_width*0.5): #we know central always has most points
-                #compute triangle+romboid in bcy2!
-                xr_r = ty-(bcy1-beam_width*0.5)
-                if alpha<(n.pi/4.):
-                # b to the right of d
-                    xr_t = n.max( n.array([b[0], ty-(bcy1-beam_width*0.5)]) )
-                    #if alpha equals zero identicaly the computer cannot handle the limit as tan_fact=>inf
-                    if alpha!=0:
-                        Area_right_romboid = 2*tan_factor*(diag*cos_neg-xr_t)*(xr_t-xr_r)
-                    else:
-                        Area_right_romboid = (xr_t-xr_r)*beam_width
-                else:
-                # b to the left of d
-                    xr_t = n.max( n.array([d[0], ty-(bcy1-beam_width*0.5)]) )
-                    Area_right_romboid = 2*tan_factor*(diag*cos_neg-xr_t)*(xr_t-xr_r)
-
-                Area_right_triangle = tan_factor*(diag*cos_neg-xr_t)*(diag*cos_neg-xr_t)
-                Area_right_polygon = Area_right_triangle+Area_right_romboid
-                Area_left_polygon = v_area - Area_right_polygon
-                int_mod_0 = 0
-                int_mod_1 = Area_left_polygon/v_area
-                int_mod_2 = Area_right_polygon/v_area
-            else:
-                #everything in bcy0
-                return 0,1,0
-
-        return int_mod_0, int_mod_1, int_mod_2
-
 
     def save(self,voxel_nbr=None):
         """
@@ -558,11 +470,11 @@ class find_refl:
         file_io.write_ref(self.param,self.voxel,voxel_nbr)
 
 
-    def write_gve(self):
+    def write_delta_gve(self):
         """
         Write gvector .gve file
         """
-        file_io.write_gve(self.param,self.voxel,self.hkl)
+        file_io.write_delta_gve(self.param,self.voxel,self.hkl)
 
 
     def write_ini(self):
@@ -572,8 +484,15 @@ class find_refl:
         file_io.write_ini(self.param,self.hkl)
 
 
-    def write_flt(self):
+    def write_delta_flt(self):
         """
          Write filtered peaks .flt file
         """
-        file_io.write_flt(self.param,self.voxel)
+        file_io.write_delta_flt(self.param,self.voxel)
+
+    def write_merged_flt(self):
+        """
+         Write filtered peaks .flt file fro merged peaks
+        """
+        file_io.write_merged_flt(self.param,self.peak_merger.merged_peaks)
+

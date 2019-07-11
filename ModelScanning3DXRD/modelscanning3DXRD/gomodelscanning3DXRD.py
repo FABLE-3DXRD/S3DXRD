@@ -279,27 +279,51 @@ def run(print_input,filename,killfile,profile,debug,parallel):
                 refl_list = result["refl_list"]
                 for voxel_nbr in range(start_voxel,end_voxel):
                     voxeldata.voxel[voxel_nbr] = refl_list[voxel_nbr]
+
+            #TODO: Make merging run in parallel if it turns out to be slow:
+            # Add reflections/delta peaks to peakmerger object
+            nbr_delta_peaks = 0
+            for voxel_peaks in voxeldata.voxel:
+                for delta_peak in voxel_peaks.refs:
+                    nbr_delta_peaks+=1
+                    voxeldata.peak_merger.add_reflection_to_images(delta_peak)
+
+            # Merge delta peaks
+            voxeldata.peak_merger.analyse_images_as_clusters()
+
         else:
             # NORMAL MODE
 
             log = True
             voxeldata.run(0,myinput.param['no_voxels'], log)
 
+            nbr_delta_peaks = 0
+            for voxel_peaks in voxeldata.voxel:
+                    nbr_delta_peaks+=len(voxel_peaks.refs)
+
+            print("Number of delta peaks: ",nbr_delta_peaks)
+            print("Number of merged peaks: ",len(voxeldata.peak_merger.merged_peaks))
+
         # Save the diffraction results to file
         if not os.path.exists(myinput.param['direc']):
             os.makedirs(myinput.param['direc'])
+
+        if 'merged.flt' in myinput.param['output']:
+            print('Writing merged filtered peaks file')
+            voxeldata.write_merged_flt()
+        if 'delta.flt' in myinput.param['output']:
+            print('Write filtered delta peaks file')
+            voxeldata.write_delta_flt()
+        if 'delta.gve' in myinput.param['output']:
+            print('Write delta peaks g-vector file')
+            voxeldata.write_delta_gve()
         if '.ref' in myinput.param['output']:
             print('Write reflection file')
             voxeldata.save()
-        if '.gve' in myinput.param['output']:
-            print('Write g-vector file')
-            voxeldata.write_gve()
         if '.ini' in myinput.param['output']:
             print('Write voxelSpotter ini file - Remember it is just a template')
             voxeldata.write_ini()
-        if '.flt' in myinput.param['output']:
-            print('Write filtered peaks file')
-            voxeldata.write_flt()
+
 
         #OBS: Not yet adapted for ModelScanning3DXRD!
         if myinput.param['make_image'] == 1:

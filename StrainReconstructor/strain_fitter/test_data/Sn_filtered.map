@@ -1,0 +1,11 @@
+#translation: -0.166667 0.277778 0.0111111
+#name 0:/home/axel/workspace/scanning-3dxrd-simulations/ModelScanning3DXRD/scripts/output/merged_flts.flt
+#intensity_info sum_of_all = 75903192.044769 , middle 3241 from 0.000000 to 180.000000 in tth: median = 15562.586702 , min = 0.148367 , max = 155531.059266 , mean = 23323.670224 , std = 24221.314635 , n = 3241
+#npks 3245
+#nuniq 332
+#Rod 0.000004 0.000015 -0.000016
+#UBI:
+5.81088063 0.00043309621 0.000263899282
+-0.000183608858 5.81138363 0.000202472647
+-9.81861323e-05 2.27168641e-05 3.17321513
+
