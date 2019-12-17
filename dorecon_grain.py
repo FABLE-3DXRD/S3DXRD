@@ -79,7 +79,7 @@ load / save 2D slices to hdf groups
 """
 
 
-def hkl_err( ubi, gve, errwt=(1,0,1) ):
+def hkl_err( ubi, gve, errwt=(1,0.25,1) ):
     """
     Computes integer hkl for each peak
     Computes error in some g-vector based units
@@ -96,25 +96,32 @@ def hkl_err( ubi, gve, errwt=(1,0,1) ):
     gcalc = np.dot( np.linalg.inv( ubi ), ihkl )
     # error in g-vector ...
     gerr =  gcalc - gve
-    #
+    assert gerr.shape[0] == 3
+     #
     # Decompose this into 3 directions ...
     #   along gve = gerr . g / |g|
     #   perp to gve and z
     #   perp to both
     # 1/|g|
-    x,y,z = gve
+    modg = np.sqrt( (gve*gve).sum(axis=0) )
+    # normalised vector along the g-vector (two theta direction)
+    x,y,z = gve/modg
     # radial error is gve . gerr
-    ng0 = gve
+    ng0 = np.array( (x,y,z) )
     # omega error is (gve x axis=001) . gerr
-    ng1 = ( -y, x, np.zeros(z.shape))
+    #  ... cross( gve, (0,0,1) )
+    #  Normalise this to unit length
+    ng1 = np.array(( -y, x, np.zeros(z.shape))) / np.sqrt( y*y + x*x )
     # eta error makes right handed set
-    ng2 = ( x*z, y*z, -x*x-y*y)
-    e0 = (gerr * ng0).sum(axis=0)**2
-    e1 = (gerr * ng1).sum(axis=0)**2
-    e2 = (gerr * ng2).sum(axis=0)**2
+    ng2 = np.array(( x*z, y*z, -x*x-y*y))
+    ng2 = ng2 / np.sqrt(( ng2*ng2 ).sum(axis=0))
+    e0 = ((gerr * ng0)**2).sum(axis=0)
+    e1 = ((gerr * ng1)**2).sum(axis=0)
+    e2 = ((gerr * ng2)**2).sum(axis=0)
     # We mainly care about 2theta / eta error
     err = np.sqrt( errwt[0]*e0 + errwt[1]*e1 + errwt[2]*e2 )
-    return ihkl, err
+    e =  ihkl, err # , e0, e1, e2
+    return e
 
 
 def loadslice( grp ):
@@ -253,8 +260,9 @@ class grain_recon_slice( object ):
         ihkl, err = hkl_err( self.ubi, gve )
         # select peaks within tolerance
         if gerrtol is None:
-            ct = (err < 0.01).sum()
-            h,b = np.histogram( err, np.linspace(0, 0.01, int(ct/20) ) )
+            m = 0.05
+            ct = (err < m).sum()
+            h,b = np.histogram( err, np.linspace(0, m, int(ct/20) ) )
             pl.plot( b[1:],h,"-")
             pl.title("npks versus error")
             pl.show()
@@ -308,8 +316,8 @@ class grain_recon_slice( object ):
 
     def fill_sinogram(self):            
         # now fill in the sinogram
-        self.sinogram = np.zeros((self.nproj, self.allpks.NY)) - 1
-        self.angles = np.zeros(self.nproj)
+        self.sinogram = np.zeros((self.nproj, self.allpks.NY))
+        self.angles = np.zeros((self.nproj,self.allpks.NY))
         intensities = self.allpks.sum_intensity[ self.pkid ]
         # Not needed unless you are masking
         assert intensities.min() >= 0
@@ -321,25 +329,43 @@ class grain_recon_slice( object ):
             t = self.sinogram[ io[i], iy[i]]
             if intensities[i] > t:
                 self.sinogram[ io[i], iy[i]] = intensities[i]
-                # We do the intensity weighted average for omega
-                self.angles[io[i]] += omega[i]
-        self.smask = self.sinogram < 0
-        self.sinogram = np.where( self.smask, 0, self.sinogram )
+                self.angles[io[i],iy[i]] = omega[i]
+        # We do the intensity weighted average for omega
+        self.angles = (self.angles*self.sinogram).sum(axis=1) / self.sinogram.sum(axis=1)                   
         # normalise intensity
-        isum = self.sinogram.sum( axis = 1 )
-        npp = self.allpks.NY - self.smask.sum(axis=1)
-        self.angles /= npp 
         self.sinogram = self.sinogram/self.sinogram.max(axis=1)[:, np.newaxis]
-        self.sort_omega()
         
     def sort_omega( self ):
         """
         put the projections in order
         """
+#        return 
+#        import pdb; pdb.set_trace()
         order = np.argsort(self.angles)
-        self.angles = self.angles[ order ]
-        self.sinogram = self.sinogram[ order ]
-        self.io = order[ self.io ]
+        self.angles = self.angles[order]
+#        self.sinogram = self.sinogram[ order ]
+        inew = np.zeros( self.io.shape, np.int32 )
+        for i,j in enumerate(order):
+            inew = np.where( self.io == j, i, inew )
+        iold = self.io.copy()
+        self.io = inew
+        self.fill_sinogram()
+        if 0:
+            pl.figure(1)
+            pl.subplot(221)
+            pl.imshow( self.sinogram.T.copy(), aspect='auto')
+            pl.title("original")
+            self.fill_sinogram()
+            pl.subplot(222)
+            pl.imshow( self.sinogram.T.copy(), aspect='auto')
+            pl.title("After fill")
+            pl.subplot(223)
+            pl.plot( iold, self.iy, ",")
+            pl.title("iold")
+            pl.subplot(224)
+            pl.title("inew")
+            pl.plot( inew, self.iy, ",")
+            pl.show()
 
     def run_iradon(self):
         """
@@ -361,33 +387,48 @@ class grain_recon_slice( object ):
                            for i in range(len(self.angles))] )
         # apply a correlation coefficient cutoff
         if cctol is None:
-            pl.subplot(121)
+            doplot = True
+            pl.figure(2, figsize=(15,15))
+            pl.subplot(321)
             pl.plot( self.angles, scors, "o")
-            pl.subplot(122)
-            pl.hist( scors, np.linspace(0,1,len(scors)/10))
-            pl.show()
+            pl.subplot(322)
+            pl.hist( scors, np.linspace(-1,1,len(scors)/10.))
+            pl.subplot(323)
+            pl.imshow( scalc.T, aspect='auto' )
+            pl.subplot(324)
+            pl.imshow( self.sinogram.copy().T, aspect='auto')
+            pl.title(self.sinogram.shape)
             # might change of py3/py2
-            cctol = float( input( "Enter cut off for cctol: ") )
+            cct = float( input( "Enter cut off for cctol: ") )
+        else:
+            cct = cctol
+            doplot = False
 
         io = self.io # i_omega indices of peaks to sinogram
         msk = np.zeros( len(io), np.bool )
+        # loop over projections
         for i in range(len(self.angles)):
-            if scors[i] < cctol:
-                # remove
+            if scors[i] > cct:
+                # keep
                 msk = msk | (io == i)
         # filter peak list according to masking
+        if msk.sum() < 10:
+            return 
+            
+        if doplot:
+            pl.subplot(325)
+            pl.plot( io[msk], self.iy[msk], "o")
+            pl.plot( io[~msk], self.iy[~msk], "+")
         self.pkid = self.pkid[msk]
-        self.io   = self.io[msk]
-        self.iy   = self.iy[msk]
         self.hkle = self.hkle[msk]
-                       
-        recon_mask = scors  > cctol
-        # FIXME = remove pkid or add a used / not used mask
-        self.sinogram = self.sinogram[ recon_mask ]
-        self.angles = self.angles[ recon_mask ]
-        
+        self.makesino()
+        self.sort_omega()
         self.run_iradon()
-
+        if doplot:
+            pl.subplot(326)
+            pl.imshow( self.sinogram.copy().T, aspect='auto')
+            pl.title(self.sinogram.shape)
+            pl.show()
                 
 def create_slice( colfile, ubi,
                   gerrtol = None,
@@ -409,9 +450,12 @@ def create_slice( colfile, ubi,
     # Compute the hkl error for this UBI matrix
     #  and decide which peaks to use
     slc.choosepeaks( gerrtol )
+    print(slc.pkid.shape)
     #
     # Make an initial sinogram (may contain overlaps)
     slc.makesino()
+    slc.sort_omega()
+    print(slc.pkid.shape)
     #
     # Make a reconstruction
     slc.run_iradon()
@@ -419,6 +463,7 @@ def create_slice( colfile, ubi,
     slc.check()
     slc.clean( cctol )
     slc.check()
+    print("After clean",slc.pkid.shape)
     return slc
 
 def recon_all_peaks( colfile, mask = None, abins = 180 ):
@@ -443,9 +488,9 @@ if __name__=="__main__":
     pksfile = sys.argv[1]
     parfile = sys.argv[2]
 
-    ccache = colfilecache( ymin=-15,
-                           ymax=15.01,
-                           ystep=0.5,
+    ccache = colfilecache( ymin=13.5,
+                           ymax=14.91,
+                           ystep=0.02,
                            parfile=parfile )
     
     colfile = ccache.get( pksfile )
@@ -454,16 +499,16 @@ if __name__=="__main__":
     mapfilename = sys.argv[4]
     
     mapf = h5py.File( mapfilename, "w" )    
-    pl.ion()
+#    pl.ion()
     for k in range(len(grains)):
         ubi = grains[k].ubi
-        slc = create_slice( colfile, ubi, gerrtol = 0.0025, cctol = 0.8 )
+        slc = create_slice( colfile, ubi, gerrtol = 0.01, cctol =0.9)# None )
         grp = mapf.require_group("grain_%d"%(k))
         slc.save( grp )
         pl.figure(1)
         pl.imshow(slc.recon)
         pl.title("%d %s"%(k,slc.allpks.filename))
-        pl.draw()
+        pl.show()
         mapf.flush()
     mapf.close()
 
