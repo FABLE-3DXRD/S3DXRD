@@ -34,7 +34,6 @@ def normal_omega(tth, eta, wavelength, omega):
     return -Qomega/np.linalg.norm(Qomega)
 
 def strain(B, h, k, l, tth, wavelength):
-    #G_original = np.sqrt((h*a_rec)**2 + (k*b_rec)**2 + (l*c_rec)**2)
 
     G_original = np.dot(B,np.array([h,k,l]))
 
@@ -45,7 +44,7 @@ def strain(B, h, k, l, tth, wavelength):
     m = np.round(2*d_original*sind(tth/2.)/wavelength)
     d_measured = (m*wavelength)/(2*sind(tth/2.))
 
-    return m, d_measured, d_original, (d_measured-d_original)/d_original
+    return m, d_measured, d_original, (d_measured-d_original)/d_original # <= strain!
 
 def weight(d_measured, d_original, strain, tth, wavelength, bragg_order, distance, pixelsize):
     '''
@@ -67,7 +66,9 @@ def weight(d_measured, d_original, strain, tth, wavelength, bragg_order, distanc
     eps = (d_rdr-d_original)/d_original # strain at radius r + dr
     w = abs(1 / (strain - eps) )
     assert strain>eps
+    
     return w
+
 
 def uniq( vals ):
     d = {}
@@ -99,6 +100,7 @@ def extract_strain_and_directions(cell, wavelength, distance, pixelsize, g, flt,
     all_sc = []
     all_Gws = []
     all_hkl = []
+    
 
     for refi,u in enumerate(uni):
 
@@ -115,8 +117,12 @@ def extract_strain_and_directions(cell, wavelength, distance, pixelsize, g, flt,
         h = u[0]
         k = u[1]
         l = u[2]
+        
+        # Perhaps these things from peaksearch can be used to improve the weight!
+        # I assume they are standard deviation in detector plane (sc, fc) and angle (omega)
+        # sig = np.cos(np.radians(45))flt.sigs[g.mask][mask] + flt.sigs[g.mask][mask]
 
-        for sc, dty, tth, eta, om, I, sc, G_w in zip( scs, detector_y_pos, tths, etas, omegas, intensity, scs, G_ws ):
+        for sc, dty, tth, eta, om, I, sc, G_w in zip( scs, detector_y_pos, tths, etas, omegas, intensity, scs, G_ws):
 
             all_hkl.append( [h,k,l] )
             bragg_order, d_measured, d_original, eps = strain(B, h, k, l, tth, wavelength)
@@ -129,6 +135,9 @@ def extract_strain_and_directions(cell, wavelength, distance, pixelsize, g, flt,
             all_intensity.append( I )
             all_sc.append( sc )
             all_Gws.append(G_w)
+            
             weights.append( weight( d_measured, d_original, eps, tth, wavelength, bragg_order, distance, pixelsize ) )
 
+
     return np.array(strains), np.array(directions), np.array(all_omegas), np.array(dtys), np.array(weights), np.array(all_tths), np.array(all_etas), np.array(all_intensity), np.array(all_sc), np.asarray(all_Gws), np.asarray(all_hkl)
+

@@ -2,10 +2,15 @@ import numpy as np
 from shapely.geometry import Polygon as shapelyPloygon
 import matplotlib.pyplot as plt
 import illustrate_mesh
+import mesher as mesher
 from scipy.optimize import LinearConstraint, NonlinearConstraint
 from scipy.optimize import minimize
 from xfab import tools
 from ImageD11 import indexing
+import sys
+from scipy.sparse import csr_matrix
+from scipy.optimize import LinearConstraint
+from scipy.optimize import minimize
 
 def get_A_matrix_row( mesh, n, N, omega, dty, beam_width ):
     # rotate and translate mesh by omega and dty
@@ -15,17 +20,22 @@ def get_A_matrix_row( mesh, n, N, omega, dty, beam_width ):
 
     # compute the area of intersection between elements and beam
     areas = compute_intersection_areas( rot_trans_mesh, beam_width )
+
+    # print(dty)
+    # illustrate_mesh.plot_field(rot_trans_mesh, areas)
+    # plt.show()
+
     area_tot = np.sum(areas)
 
-    if area_tot==0:
+    if area_tot==0: # perhaps also remove very slightly gracing lines
         return None
 
     row_areas = np.repeat(areas,6)
-
+    #print('area_tot',area_tot)
     return row_areas*a(n, N)/area_tot
 
 
-def compute_intersection_areas( mesh, beam_width ):
+def compute_intersection_areas( mesh, beam_width, plot=False ):
 
     intersection_areas = np.zeros(mesh.shape[0])
     w = beam_width/2.
@@ -35,30 +45,37 @@ def compute_intersection_areas( mesh, beam_width ):
     elif mesh.shape[1]==8:
         min_x = np.min(mesh[:,(0,2,4,6)])
         max_x = np.max(mesh[:,(0,2,4,6)])
-    
+
     beam = shapelyPloygon([(min_x, w), (max_x, w), (max_x, -w), (min_x, -w)])
 
     for i,elm in enumerate(mesh):
+        
+        # TODO: make this loop more efficent
+        # save beam as polygon once
+        # save plygon mesh once
+        # only iterate the elements close to the beam
+        if abs(np.mean(elm[1::2]))>=np.sqrt(2)*3*w:
+            intersection_areas[i] = 0.0
+            continue
+
         if len(elm)==6:
             poly_elm = shapelyPloygon([(elm[0], elm[1]), (elm[2], elm[3]), (elm[4], elm[5])])
         elif len(elm)==8:
             poly_elm = shapelyPloygon([(elm[0], elm[1]), (elm[2], elm[3]), (elm[4], elm[5]), (elm[6], elm[7])])
         intersection_areas[i] = beam.intersection(poly_elm).area
+        
+        if plot:
+            plt.plot(beam.exterior.xy[0],beam.exterior.xy[1])
+            for m in mesh:
+                plt.plot(m[0],m[1],'ro')
+                plt.plot(m[2],m[3],'ro')
+                plt.plot(m[4],m[5],'ro')
+                plt.plot(m[6],m[7],'ro')
+            plt.plot(poly_elm.exterior.xy[0],poly_elm.exterior.xy[1])
+            plt.title(intersection_areas[i])
+            plt.show()
 
     return intersection_areas
-
-def find_intersecting_elm( mesh, beam_width ):
-    '''
-    Return the part of the mesh that is fully or pratly inside the beam.
-    Also return the row mask so tha we know where these elements are located
-    in the full mesh.
-    '''
-    # assume infinite beam in x and beam_width in y
-    areas = compute_intersection_areas( mesh, beam_width )
-    mask_elm = areas[:]
-    mask_elm[mask_elm>0]=1
-    mask_elm = mask_elm.astype(bool)
-    return mesh[mask_elm,:], mask_elm
 
 
 def translate_mesh( mesh, translation_x, translation_y ):
@@ -111,18 +128,25 @@ def calc_A_matrix( mesh, directions, omegas, dtys, beam_width  ):
     N = mesh.shape[0] # number of elements
 
     A = np.zeros((M,6*N))
+
     bad_equations = []
     count=0
+    print('Building projection matrix...')
     for k,(omega, dty, n) in enumerate( zip(omegas, dtys, directions) ):
         # each measurement is weigthed by its belived resolution..
         row = get_A_matrix_row( mesh, n, N, omega, dty, beam_width )
+        if k%300==0:
+            print('Getting row number: '+str(k) +' of '+str(len(dtys)))
         if row is None:
             bad_equations.append(k)
             count+=1
         else:
             A[k,:] = row
-    print("Rank of A:", np.linalg.matrix_rank(A) )
-    print("total number of eqs: ", M, ". Topology cutoff lead to", 100.*count/float(M), " percent eqs to be unusuable")
+    print('')
+    print("Rank of A: "+str(np.linalg.matrix_rank(A)) )
+    print("Total number of eqs: "+str( M) )
+    print("Topology cutoff lead to "+str( 100.*count/float(M) )+" percent eqs to be unusuable")
+    print('')
     return A, bad_equations
 
 def constraints(mesh, low_bound, high_bound):
@@ -130,19 +154,40 @@ def constraints(mesh, low_bound, high_bound):
     Limit the difference in strain between to neighbouring elements
     A neighbour pair is defined as two elements sharing at least one node
     '''
+    print('computing constraints matrix')
     c = []
     incl = []
+
+    data = []
+    row = []
+    col = []
+    curr_row = 0
     for i,elm in enumerate(mesh):
         indx = find_index_of_neighbors(mesh, elm)
+        #print('Element '+ str(i) + ' neighbours elements' + str(indx) )
         for j in indx:
             if [i,j] in incl or [j,i] in incl: continue
+            
             for k in range(6):
-                row = [0]*mesh.shape[0]*6
-                row[(i*6)+k] = 1.
-                row[(j*6)+k] = -1.
-                c.append( row )
+                #row = [0]*mesh.shape[0]*6
+                #row[(i*6)+k] = 1.
+                #row[(j*6)+k] = -1.
+                #c.append( row )
+                row.append( curr_row )
+                row.append( curr_row )
+                curr_row+=1
+                data.append(1.)
+                col.append( (i*6)+k)
+                data.append(-1.)
+                col.append((j*6)+k)
+
             incl.append([i,j])
-    c = np.array(c)
+    r,c = curr_row, mesh.shape[0]*6
+
+    # (updated to sparse representation, much faster)
+    
+    c = csr_matrix( (data, (row, col)), shape=(r, c) )
+    #c = np.array(c)
     lb = np.ones(c.shape[0])*low_bound
     ub = np.ones(c.shape[0])*high_bound
 
@@ -151,65 +196,89 @@ def constraints(mesh, low_bound, high_bound):
 
 
 def find_index_of_neighbors(mesh, element):
+    elm_side = np.max(element[0::2]) - np.min(element[0::2])
     index_neighbors = []
     for i,elm in enumerate(mesh):
         if sum(elm==element)==len(elm): continue
         is_neighbour = False
         for x,y in zip(elm[0::2],elm[1::2]):
             for x_e,y_e in zip(element[0::2],element[1::2]):
-                if x==x_e and y==y_e:
+                if abs(x-x_e)<elm_side/10. and abs(y-y_e)<elm_side/10.:
                     is_neighbour = True
         if is_neighbour: index_neighbors.append(i)
     return np.array( index_neighbors )
 
-
-
     
 
 
-def trust_constr_solve( mesh, etas, hkl, tths, intensity, directions, strains , omegas, dtys, weights, beam_width, grad_constraint ):
+def trust_constr_solve( mesh, etas, hkl, tths, intensity, directions, strains , omegas, dtys, weights, beam_width, grad_constraint, maxiter ):
     '''
     '''
 
     nelm = mesh.shape[0]
-    
+    print('nelm: ', nelm)
+
     A, bad_equations = calc_A_matrix( mesh, directions, omegas, dtys, beam_width )
-    
+
     A = np.delete(A, bad_equations, axis=0)
     strains = np.delete(strains, bad_equations, axis=0)
     weights = np.delete(weights, bad_equations, axis=0)
     
+    lb,c,ub = constraints(mesh, -grad_constraint, grad_constraint)
+    print('constraint matrix shape: ',c.shape)
+    # plt.imshow(c.todense())
+    # plt.show()
+
+    linear_constraint = LinearConstraint(c, lb, ub, keep_feasible=True)
+    x0 = np.zeros(6*nelm)
+
+    def callback( xk, state ):
+
+        out="   {}      {}      {}"
+        if state.nit==1: print(out.format("iteration","cost","max strain grad") )
+        # x = xk.reshape(nelm,6)
+        # eps_xx, eps_yy, eps_zz, eps_yz, eps_xz, eps_xy = x[:,0],x[:,1],x[:,2],x[:,3],x[:,4],x[:,5]
+        # illustrate_mesh.plot_field( mesh, eps_zz )
+
+        # fig, ax = plt.subplots(figsize=(10,8))
+        
+        # coordinates = mesher.get_elm_centres( mesh )
+        # zz = np.zeros((71,71))
+        # for zval,coo in zip(eps_zz, coordinates):
+        #     row = int( (coo[0]/beam_width)  + zz.shape[1]//2 )
+        #     col = int( (coo[1]/beam_width)  + zz.shape[1]//2 )
+        #     assert row>=0
+        #     assert col>=0
+        #     # print('coordinate', coo[0], coo[1])
+        #     # print('row,col:', row, col)
+        #     # print('beam_width: ',beam_width)
+        #     zz[row,col] = zval
+        # im = ax.imshow(zz*(10**4), cmap='jet')
+        # cbar = fig.colorbar(im, ax=ax)
+        # cbar.ax.set_title(r'$10^{-4}$', size=27)
+        # cbar.ax.tick_params(labelsize=17)
+        # ax.tick_params(labelsize=17)
+        # plt.show()
+        print( out.format( state.nit, np.round(state.fun,9), np.max(np.abs(c.dot(xk))) ) )
+        return state.nit==maxiter
 
     W = np.diag( weights )
     WA = np.dot(W,A)
     m = strains
     Wm = np.dot(W,m)
-
     WATWA = np.dot( WA.T, WA )
     WATWm = np.dot( WA.T, Wm )
     def func( x ): return 0.5*np.linalg.norm( (np.dot( WA, x ) - Wm) )**2
     def jac( x ): return ( np.dot(WATWA,x) - WATWm )
     def hess( x ): return WATWA
-    
-    from scipy.optimize import LinearConstraint
-    from scipy.optimize import minimize
-    lb,c,ub = constraints(mesh, -grad_constraint, grad_constraint)
-
-    linear_constraint = LinearConstraint(c, lb, ub, keep_feasible=True)
-    x0 = np.zeros(6*nelm)
-
-
-    def callback( xk, state ):
-        out="   {}      {}"
-        if state.nit==1: print(out.format("iteration","cost") )
-        print( out.format( state.nit, np.round(state.fun,5) ) )
-        return state.nit==10
 
     res = minimize(func, x0, method='trust-constr', jac=jac, hess=hess,\
                     callback=callback, tol=1e-8, \
                     constraints=[linear_constraint],\
-                    options={'disp': True, 'maxiter':10})
+                    options={'disp': True, 'maxiter':maxiter})
+
     s_tilde = res.x
+
     #conditions = np.dot(c,s_tilde)
 
     if 0:
@@ -311,7 +380,7 @@ def tikhonov_solve( mesh, directions, strains , omegas, dtys, weights, beam_widt
     lb,c,ub = constraints(mesh, -grad_constraint, grad_constraint)
 
     alpha = 0.0
-    dalpha = 1.0
+    dalpha = 100.0
     #R = c*alpha
     s_tilde = np.zeros(mesh.shape[0]*6)
     itr=1
@@ -324,6 +393,7 @@ def tikhonov_solve( mesh, directions, strains , omegas, dtys, weights, beam_widt
         print("Selecting lambda iteration ", itr)
     alpha = alpha - dalpha
     R = c*alpha
+    
     s_tilde = np.dot(np.dot(np.linalg.inv( WATWA + np.dot(R.T,R) ),WA.T), Wm )
 
     # reformat, each row is strain for the element
@@ -361,6 +431,10 @@ def solve( mesh, directions, strains , omegas, dtys, weights, beam_width ):
     s_tilde = s_tilde.reshape(nelm,6)
 
     return s_tilde[:,0],s_tilde[:,1],s_tilde[:,2],s_tilde[:,3],s_tilde[:,4],s_tilde[:,5]
+
+
+
+
 
 
 

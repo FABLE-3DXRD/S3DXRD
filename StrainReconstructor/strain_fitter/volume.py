@@ -13,8 +13,9 @@ import copy
 
 class Volume(object):
 
-    def __init__(self, reconstructor, omegastep, hkltol, nmedian, rcut, save_dir="."):
+    def __init__(self, reconstructor, omegastep, hkltol, nmedian, rcut, ymin, ymax, ystep, unit, save_dir="."):
         self.slices = {}
+        self.slice_masks = {}
         self.reconstructor = reconstructor
 
         self.omegastep = omegastep
@@ -28,7 +29,18 @@ class Volume(object):
         self.peak_mapper = PeakMapper()
         self.topology = Topology()
 
-    def reconstruct(self, flt_files, grain_files, labels, z_positions=None, selected_grain=None):
+        self.unit = unit
+        self.ymin_flt = ymin
+        self.ymax_flt = ymax
+        self.ystep = (ystep*unit)/(10**(-6)) # rescale to microns
+        self.number_y_scans = np.round((abs(ymax-ymin)/ystep)).astype(int)+1
+
+        self.ymin = -self.ystep*(self.number_y_scans//2)
+        self.ymax =  self.ystep*(self.number_y_scans//2)
+
+        
+
+    def reconstruct(self, flt_files, grain_files, labels, z_positions=None, selected_grain=None, interpolate=True):
         '''
         Take a series of flt file paths (strings) and read them 
         into columnfiles one by one. Runs the reconstruction on
@@ -62,22 +74,32 @@ class Volume(object):
 
         print('Finished reconstruction of volume, saving to vtk and npy..')
         slices = self.slice_dict_to_list(labels, z_positions)
-        self.save_volume_as_vtk(slices, interpolate=True)
+        self.save_volume_as_vtk(slices, interpolate=interpolate)
         self.save_volume_as_npy(slices)
 
     def recon_slice(self, flt_file, grain_file, label):
 
         print("\n \nStarting reconstruction of slice: " + label)
+        print(flt_file)
         flt = columnfile.columnfile( flt_file )
+        
+        #---------------------------------------------------------------------------
+        # Fix the dty column of the flt such that it scanns across 0 anddty is in microns.
+        flt.dty[:] = ((flt.dty - self.ymin_flt)*self.unit/(10**(-6))) - self.ystep*(self.number_y_scans//2)
+        print('\nFixed the dty column, existing dtys are now (in units of microns):')
+        print(np.unique(flt.dty))
+        print('')
+        #---------------------------------------------------------------------------
+        
         grains = grain.read_grain_file( grain_file )
 
 
-        self.ymin, self.ystep, self.number_y_scans = self.extract_scan_geometry( flt )
         grain_topology_masks = self.recon_topology( flt, grains )
 
 
         g, s = self.select_grains( grains, grain_topology_masks )
         
+
         recons = self.reconstructor.reconstruct( flt, g, self.number_y_scans,\
                                                  self.ymin, self.ystep, s )
         
@@ -85,6 +107,7 @@ class Volume(object):
         print("\n Finished reconstruction of slice: " + label)
         print("Saving results..")
         self.slices[label] = recons
+        self.slice_masks[label] = sum( grain_topology_masks )
         self.save_slice_as_npy( recons, label )
 
         return recons
@@ -107,7 +130,7 @@ class Volume(object):
     def select_grains(self, grains, grain_topology_masks):
 
         if self.sm is None:
-            print("sm is none")
+            #print("sm is none")
             return grains, grain_topology_masks
         elif self.sm.ref_grain is None:
             s = grain_topology_masks[self.sm.index]
@@ -146,15 +169,6 @@ class Volume(object):
             z = np.arange(0, arr.shape[2]+1, dtype=np.int32)
             gridToVTK(self.save_dir + "/volume"+"_"+key, x, y, z, cellData = {key: arr})
 
-    def extract_scan_geometry( self, flt ):
-        existing_dtys = np.sort( np.unique(flt.dty) )
-        ymin = -np.max([abs(existing_dtys[0]),abs(existing_dtys[-1])])
-        ystep = np.abs( existing_dtys[0]-existing_dtys[1] )
-        number_y_scans = np.round((abs(ymin)/ystep)*2).astype(int)+1
-        for i in range(len(existing_dtys)-1):
-            assert abs(existing_dtys[i]-existing_dtys[i+1])==ystep
-        return ymin, ystep, number_y_scans
-
     def slice_dict_to_list(self, keys, z_positions):
         empty = copy.deepcopy( self.slices[keys[0]] )
         for key in self.reconstructor.field_converter.field_keys:
@@ -178,12 +192,13 @@ class Volume(object):
             points = (points[0],points[1])
             values = volume[points]
             grid_x, grid_y = np.mgrid[0:dx-1:dx*1j, 0:dy-1:dy*1j]
-            return griddata(points, values, (grid_x, grid_y), method='linear')
+            interp = griddata(points, values, (grid_x, grid_y), method='linear')
         else:
             values = volume[points]
             grid_x, grid_y, grid_z = np.mgrid[0:dx-1:dx*1j, 0:dy-1:dy*1j, 0:dz-1:dz*1j]
-            return griddata(points, values, (grid_x, grid_y, grid_z), method='linear')
+            interp = griddata(points, values, (grid_x, grid_y, grid_z), method='linear')
 
+        return interp
 
 
     def sinogram( self, grain_no, flt_file, grain_file ):
@@ -193,7 +208,6 @@ class Volume(object):
         g = grains[grain_no]
 
         params = self.reconstructor.params
-        self.ymin, self.ystep, self.number_y_scans = self.extract_scan_geometry( flt )
         self.peak_mapper.map_peaks(flt, grains, params, \
                 self.omslop, self.hkltol, self.nmedian, self.rcut,\
                 self.ymin, self.ystep, self.number_y_scans)

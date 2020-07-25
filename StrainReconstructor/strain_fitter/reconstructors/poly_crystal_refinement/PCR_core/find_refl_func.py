@@ -42,7 +42,8 @@ class find_refl_func:
         self.no_yscans = no_yscans
         self.save_dir = save_dir
         self.steplength_termination = 10**(-8)
-        self.maxiter = 15
+        self.maxiter = 50
+
 
         self.initial_guess = initial_guess
         self.UB_matrices = None
@@ -562,7 +563,6 @@ class find_refl_func:
         cell = [a,b,c,alpha,beta,gamma]
         euler= [phi1,PHI,phi2]
         '''
-
         U = tools.euler_to_u(euler[0],euler[1],euler[2])
         B = tools.epsilon_to_b(strain, self.unit_cell)
         return np.dot(U,B)
