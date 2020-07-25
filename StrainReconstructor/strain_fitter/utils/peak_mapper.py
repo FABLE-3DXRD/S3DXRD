@@ -11,7 +11,7 @@ class PeakMapper(object):
 
     def map_peaks(self, flt, grains, params, omslop, hkltol, nmedian, rcut, ymin, ystep, number_y_scans ):
         
-        print('Mapping peaks to grains..')
+        print('Starting to map peaks to grains..')
 
         tth, eta, gve = self.initiate_cols( flt, params, omslop)
 
@@ -21,8 +21,6 @@ class PeakMapper(object):
         # tth, eta, gve = self.grain_fitter.get_peak_quantities( flt, params, omslop)
         # #
 
-        print('Initated columns')
-
         for i,gr in enumerate(grains):
             self.assign_peaks_to_grain( gr, gve, flt, params, nmedian,  hkltol )
         self.discard_overlaping_spots( grains, gve, flt, params, nmedian, hkltol )
@@ -30,8 +28,8 @@ class PeakMapper(object):
         init_assigned_peaks=0
         for i,gr in enumerate(grains):
             init_assigned_peaks += np.sum(gr.mask)
-        print('Performed first assignment based on input inverse UB matrices setting all grain centroids to (0,0,0)')
-        print(str(init_assigned_peaks)+' peaks out of'+str(flt.nrows)+' where succesfully assigned')
+        print('Made first assignment based on UBI, setting all grain centroids to (0,0,0)')
+        print(str(init_assigned_peaks)+' peaks out of '+str(flt.nrows)+' where succesfully assigned\n')
 
         # Simple version
         #---------------------------------------------------------------------
@@ -43,12 +41,13 @@ class PeakMapper(object):
         assigned_peaks = 0
         prev_assigned_peaks = 0
 
-        print('')
         print('Starting grain centroid and UBI refinement for peak assignment')
+        print('-----------------------------------------------------------------------------------')
+        print("Iteration        Number of indexed peaks       Total number of peaks       hkltol")
         # Keep iterating until the change in assigned peaks   
         # is less than 1% of the total measured peak number.
         #while( itr<3 or (assigned_peaks-prev_assigned_peaks)>(flt.nrows/100.) ):
-        for i in range(2):
+        for j in range(2):
             prev_assigned_peaks = assigned_peaks
             assigned_peaks = 0 
 
@@ -66,9 +65,12 @@ class PeakMapper(object):
                 assigned_peaks += np.sum(gr.mask)
                 self.grain_fitter.fit_one_grain( gr, flt, params )
 
-            print("Iteration ",itr," number of indexed peaks:", assigned_peaks, "of ", flt.nrows, "hkltol: ",hkltol)
+    
+            print("     "+str(itr)+"                   "+str(assigned_peaks)+"                     "+str(flt.nrows)+"                  "+str(hkltol) )
             itr += 1
         #---------------------------------------------------------------------
+        print('-----------------------------------------------------------------------------------')
+        print('')
         tth, eta, gve = self.update_cols_per_grain( flt, params, omslop, grains, x, y )
 
 
@@ -150,7 +152,6 @@ class PeakMapper(object):
         drlv2 = (drlv*drlv).sum(axis=0)
         # Tolerance to assign to a grain is rather poor
         gr.mask = drlv2 < hkltol*hkltol # g.mask is a boolean declaration of all peaks that can belong to grain g
-        #raise KeyboardInterrupt
 
     def discard_overlaping_spots( self, grains, gve, flt, pars, nmedian, hkltol ):
         """

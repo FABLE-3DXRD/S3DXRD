@@ -1,5 +1,8 @@
+from __future__ import print_function
 import numpy as np
 from skimage.transform import iradon, radon
+import sys
+import matplotlib.pyplot as plt
 
 class Topology(object):
 
@@ -13,6 +16,10 @@ class Topology(object):
         grain_masks=[]
         grain_recons=[]
         for i,g in enumerate(grains):
+
+            sys.stdout.flush()
+            print('Done FBP for '+str(i+1)+' of '+str(len(grains))+' grains',end='\r')
+
             sinoangles, sino, recon = self.FBP_grain( g, flt, \
                         ymin, ystep, omegastep, number_y_scans )
             normalised_recon = recon/recon.max()
@@ -20,6 +27,11 @@ class Topology(object):
             mask = normalised_recon > rcut
             grain_masks.append(mask)
 
+            #plt.imshow(mask)
+            #plt.title(i)
+            #plt.show()
+
+        print('Done FBP for '+str(len(grains))+' of '+str(len(grains))+' grains\n')
         self.update_grainshapes(grain_recons,grain_masks)
         return grain_masks, grain_recons
 
@@ -31,6 +43,12 @@ class Topology(object):
         '''
 
         iy = np.round( (flt.dty[ g.mask ] - ymin) / ystep ).astype(int)
+        print('')
+        print('iy    :    ', iy)
+        print('ymin  :    ', ymin)
+        print('ystep :    ', ystep)
+        print('')
+
         omega = np.round( flt.omega[ g.mask ] / omegastep ).astype(int)
 
         keys = [ (hkl[0], hkl[1], hkl[2], int(s))
@@ -63,7 +81,7 @@ class Topology(object):
         ssino = sino[order].T
         output_size = int(number_y_scans)
         back_projection = iradon( ssino, theta=sinoangles, output_size=output_size,  circle = False)
-        
+
         return sinoangles, ssino, back_projection 
 
     def uniq(self, vals):

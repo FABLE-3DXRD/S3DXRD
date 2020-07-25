@@ -10,7 +10,12 @@ class FieldConverter(object):
             'E11','E22','E33','E23','E13','E12',            \
             'a','b','c','alpha','beta','gamma',             \
             'rod1','rod2','rod3','UBI11','UBI12','UBI13',   \
-            'UBI21','UBI22','UBI23','UBI31','UBI32','UBI33' \
+            'UBI21','UBI22','UBI23','UBI31','UBI32','UBI33', \
+            'PrincStrain1', 'PrincStrain2', 'PrincStrain3', \
+            'PrincDir1x', 'PrincDir1y', 'PrincDir1z', \
+            'PrincDir2x', 'PrincDir2y', 'PrincDir2z', \
+            'PrincDir3x', 'PrincDir3y', 'PrincDir3z',
+            'index' \
             ]
 
     def initiate_field_dict(self, rows, cols):
@@ -19,7 +24,7 @@ class FieldConverter(object):
             field_recons[key] = np.full([rows,cols], np.nan)
         return field_recons
 
-    def add_voxel_to_field(self, voxel, field_recons, row , col, params):
+    def add_voxel_to_field(self, voxel, field_recons, row , col, params, index=0):
 
         cell = indexing.ubitocellpars( voxel.ubi )
         field_recons['a'][row, col] = cell[0]
@@ -57,7 +62,28 @@ class FieldConverter(object):
         field_recons['E22'][row, col] = sample_strain[1,1]
         field_recons['E23'][row, col] = sample_strain[1,2]
         field_recons['E33'][row, col] = sample_strain[2,2]
-    
+
+        princ_strain, princ_direc = np.linalg.eig(sample_strain)
+
+        field_recons['PrincStrain1'][row, col] = princ_strain[0]
+        field_recons['PrincStrain2'][row, col] = princ_strain[1]
+        field_recons['PrincStrain3'][row, col] = princ_strain[2]
+
+        field_recons['PrincDir1x'][row, col] = princ_direc[0,0]
+        field_recons['PrincDir1y'][row, col] = princ_direc[1,0]
+        field_recons['PrincDir1z'][row, col] = princ_direc[2,0]
+
+        field_recons['PrincDir2x'][row, col] = princ_direc[0,1]
+        field_recons['PrincDir2y'][row, col] = princ_direc[1,1]
+        field_recons['PrincDir2z'][row, col] = princ_direc[2,1]
+
+        field_recons['PrincDir3x'][row, col] = princ_direc[0,2]
+        field_recons['PrincDir3y'][row, col] = princ_direc[1,2]
+        field_recons['PrincDir3z'][row, col] = princ_direc[2,2]   
+
+        field_recons['index'][row, col] = index
+
+
     def extract_cell(self, params):
         a = params.parameters['cell__a']
         b = params.parameters['cell__b']

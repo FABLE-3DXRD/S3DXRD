@@ -19,7 +19,8 @@ def plot_field( mesh, element_values, labels=None, title=None, vmin=None, vmax=N
     mesh - a mesh numpy array, each row is an element with 3 nodes ([x1, y1, x2, y2, x3, y3])
     element_values - The values to be plotted, one for each element (numpy array)
     '''
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10,8))
+    ev = element_values*(10**4)
     patches = []
     for i,elm in enumerate(mesh):
         if len(elm)==6:
@@ -35,15 +36,16 @@ def plot_field( mesh, element_values, labels=None, title=None, vmin=None, vmax=N
             xy = np.array([elm[0:2], elm[2:4], elm[4:6], elm[6:8] ])
         polygon = Polygon(xy, True)
         patches.append(polygon)
+        ax.text(np.mean(elm[0::2]),np.mean(elm[1::2]),str(i),size=17)
         if labels is not None:
            x = (elm[0]+elm[2]+elm[4])/3.
            y = (elm[1]+elm[3]+elm[5])/3.
            plt.text(x,y,str(i),size=17)
 
     p = PatchCollection(patches, alpha=1.0)
-    if vmin is not None: element_values[element_values<vmin]=vmin
-    if vmax is not None: element_values[element_values>vmax]=vmax
-    p.set(array=element_values, cmap='jet')
+    if vmin is not None: ev[ev<vmin]=vmin
+    if vmax is not None: ev[ev>vmax]=vmax
+    p.set(array=ev, cmap='jet')
     ax.add_collection(p)
     cbar = fig.colorbar(p, ax=ax)
     cbar.ax.set_title(r'$10^{-4}$', size=27)

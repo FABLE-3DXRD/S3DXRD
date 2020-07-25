@@ -1,3 +1,5 @@
+from __future__ import print_function
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -9,9 +11,9 @@ import copy
 class SCR(object):
 
     def __init__(self, param_file):
-        
+
         self.params = parameters.read_par_file( param_file )
-        
+
         self.grain_fitter = GrainFitter()
         self.field_converter = FieldConverter()
 
@@ -28,10 +30,13 @@ class SCR(object):
 
             for j,(ix, iy) in enumerate(zip(ii[active], jj[active])):
                 voxel = self.fit_one_point( g, flt, self.params, ix, iy, ystep )
+                #voxel = grain.grain( g.ubi ) # to skip recon and get grain avg props
                 row = ix + rows//2
                 col = iy + rows//2
-                self.field_converter.add_voxel_to_field(voxel, field_recons, row , col, self.params)
-
+                self.field_converter.add_voxel_to_field(voxel, field_recons, row , col, self.params, index=i)
+                sys.stdout.flush()
+                print('Done SCR for '+str(i+1)+' of '+str(len(grains))+' grains',end='\r')
+        print('Done SCR for '+str(len(grains))+' of '+str(len(grains))+' grains\n')          
         return field_recons
 
     def fit_one_point(self, gr, flt, pars, ix, iy, ystep ):
@@ -44,7 +49,7 @@ class SCR(object):
         so = np.sin( om )
         #idtycalc = np.round(-ix * so + iy * co) # this seeems wrong?! why mirror across y!?
         idtycalc = np.round(ix * so + iy * co)
-        idty = np.round(flt.dty[ gr.mask ] / ystep)
+        idty = np.round( (flt.dty[ gr.mask ] )/ ystep)
         #     m = abs(dty - dtycalc) < ystep*0.75
         m = idtycalc == idty
 
