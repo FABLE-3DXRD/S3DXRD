@@ -39,7 +39,7 @@ class PeakMerger(object):
         self.omega_step = param['omega_step']
         self.omega_start = param['omega_start']
         self.omega_end = param['omega_end']
-        self.omegas = np.arange(self.omega_start, self.omega_end, np.round(self.omega_step))
+        self.omegas = np.arange(self.omega_start, self.omega_end, self.omega_step)
 
         self.dtys_index = self.get_dtys_index() #in voxel units
 
