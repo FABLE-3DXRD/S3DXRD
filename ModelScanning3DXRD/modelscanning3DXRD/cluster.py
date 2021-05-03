@@ -89,7 +89,6 @@ def cluster_in_z_y_omega(peaks,index_z,index_y,index_om,tol_z,tol_y,tol_om):
     '''
     Cluster peaks in frame stack space
     '''
-
     clustered_peaks=[]
     mergedpks=0
     curr=0

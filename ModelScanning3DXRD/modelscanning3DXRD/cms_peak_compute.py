@@ -68,10 +68,9 @@ class PeakMerger(object):
         binary_refl = copy.copy(reflection)
         binary_refl[A_id['detz']] = np.round(reflection[A_id['detz']])
         binary_refl[A_id['dety']] = np.round(reflection[A_id['dety']])
-        binary_refl[A_id['omega']] = np.radians( np.floor(reflection[A_id['omega']]*180./np.pi) + 0.5*self.omega_step )
-        # binary_refl[A_id['detz']] = reflection[A_id['detz']]
-        # binary_refl[A_id['dety']] = reflection[A_id['dety']]
-        # binary_refl[A_id['omega']] = reflection[A_id['omega']]
+
+        binary_refl[A_id['omega']] = np.radians( self.omegas[ np.argmin( np.abs( self.omegas - np.degrees(reflection[A_id['omega']]) ) ) ] )
+
         self.peaks_by_dty[dty].append(binary_refl)
 
 
@@ -118,7 +117,6 @@ class PeakMerger(object):
         tol_z = 20 #units of pixels
         tol_y = 20 #units of pixels
         tol_om = 2.01*(1/180.)*np.pi*self.omega_step #units of radians use 1.001 to avoid numerical error
-
 
         self.merged_peaks = []
 

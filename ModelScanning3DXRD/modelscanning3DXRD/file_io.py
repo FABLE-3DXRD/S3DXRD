@@ -111,6 +111,10 @@ def write_merged_flt(param,merged_peaks):
                         peak[A_id['dty']]
                         ) )
         f.write(out)
+    from ImageD11 import columnfile as c
+    peaks = c.columnfile(filename)
+    print( "omegas", n.unique(peaks.omega), len(n.unique(peaks.omega)) )
+    print("npeaks", peaks.nrows )
 
 def write_delta_flt(param,voxel):
     if not memory_safety_check(param):
