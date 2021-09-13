@@ -24,11 +24,6 @@ def get_dty( flt, motor='dty' ):
     failing that it returns 0
     """
     sptfile = flt[:-3]+"spt"
-    if not os.path.exists( sptfile ):
-        for item in flt.split("_"):
-            if item[0] == 'y':
-                return float(item[1:].replace("p","."))
-        return 0
     with open( sptfile,  "r") as sptfile:
         vals = None
         names = None
@@ -41,6 +36,12 @@ def get_dty( flt, motor='dty' ):
                 names = line.split()
                 if vals is not None:
                     return float(vals[ names.index( motor ) ])
+                
+
+    for item in flt.split("_"):
+        if item[0] == 'y':
+            return float(item[1:].replace("p","."))
+    return 0
                     
 
 

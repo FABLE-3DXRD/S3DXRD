@@ -79,7 +79,7 @@ class GrainFitter(object):
                                             pars.get('wavelength'),
                                             wedge=pars.get('wedge'),
                                             chi=pars.get('chi') )
-                                            
+
         pars.parameters['t_x'] = 0
         pars.parameters['t_y'] = 0
         pars.parameters['t_z'] = 0
@@ -133,4 +133,5 @@ class GrainFitter(object):
         cs, x, y = np.dot( np.linalg.inv( ( np.dot( A.T, A) ) ), np.dot( A.T, p ) )
 
         # convert to 3DXRD coordinates, retruns: cs, x, y in 3DXRD system.
-        return cs, y, x
+        # print(y, -x)
+        return cs, y, -x

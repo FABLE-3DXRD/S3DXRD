@@ -1,3 +1,5 @@
+from __future__ import print_function
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
@@ -25,8 +27,9 @@ class PCR(object):
         for i,g in enumerate(grains):
 
             active = grain_topology_masks[i]
-            #plt.imshow(active)
-            #plt.show()
+            # plt.imshow(active)
+            # plt.show()
+            #continue
             voxels_as_grain_objects = self.run_pcr(self.cif_file, \
                                  active, flt, g, number_y_scans, ymin, ystep)
 
@@ -40,7 +43,9 @@ class PCR(object):
                 row = ix + rows//2
                 col = iy + rows//2
                 self.field_converter.add_voxel_to_field(voxel, field_recons, row , col, self.params)
-
+                sys.stdout.flush()
+                print('Done PCR for '+str(i+1)+' of '+str(len(grains))+' grains',end='\r')
+        print('Done PCR for '+str(len(grains))+' of '+str(len(grains))+' grains\n')
         return field_recons
 
     def run_pcr(self, cif_file, grain_mask, flt, gr, number_y_scans, ymin, ystep):
