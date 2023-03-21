@@ -11,9 +11,9 @@ from xfab import tools
 from strain_fitter.utils.field_converter import FieldConverter
 from strain_fitter.utils import measurement_converter as mc
 
-from ASR_core import algebraic_strain_refinement as asr
-from ASR_core import mesher as mesher
-from ASR_core import illustrate_mesh as illustrate_mesh
+from .ASR_core import algebraic_strain_refinement as asr
+from .ASR_core import mesher as mesher
+from .ASR_core import illustrate_mesh as illustrate_mesh
 
 class ASR(object):
 

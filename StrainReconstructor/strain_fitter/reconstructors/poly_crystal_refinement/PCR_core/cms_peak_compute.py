@@ -13,9 +13,9 @@ At least according to the firm belif of the author :=)
 
 from xfab import detector
 import numpy as np
-import variables
+from . import variables
 import matplotlib.pyplot as plt
-import cluster
+from . import cluster
 #import cluster_new
 import copy
 

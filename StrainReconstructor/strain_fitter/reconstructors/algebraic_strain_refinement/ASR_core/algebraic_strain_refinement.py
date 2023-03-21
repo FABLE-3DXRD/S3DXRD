@@ -1,8 +1,8 @@
 import numpy as np
 from shapely.geometry import Polygon as shapelyPloygon
 import matplotlib.pyplot as plt
-import illustrate_mesh
-import mesher as mesher
+from . import illustrate_mesh
+from . import mesher as mesher
 from scipy.optimize import LinearConstraint, NonlinearConstraint
 from scipy.optimize import minimize
 from xfab import tools

@@ -9,7 +9,7 @@ from xfab import tools
 
 from strain_fitter.utils.field_converter import FieldConverter
 
-from PCR_core import setup_grain, find_refl_func, jacobian_finder
+from .PCR_core import setup_grain, find_refl_func, jacobian_finder
 
 class PCR(object):
 
