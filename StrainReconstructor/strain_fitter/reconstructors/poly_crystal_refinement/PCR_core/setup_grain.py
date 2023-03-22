@@ -4,7 +4,7 @@ properly representing the grain investigated for simul fit
 '''
 import numpy as np
 from ImageD11 import columnfile,grain
-import reflections
+from . import reflections
 from xfab import tools
 from xfab import detector
 

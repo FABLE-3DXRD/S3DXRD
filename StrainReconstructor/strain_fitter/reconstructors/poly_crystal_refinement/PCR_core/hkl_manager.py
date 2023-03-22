@@ -1,5 +1,5 @@
 import numpy as np
-import peak_debug_checker
+from . import peak_debug_checker
 import copy
 import time
 import random

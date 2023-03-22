@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from ImageD11 import parameters, grain, transform
-import scanning_transform
-from grain_fitter import GrainFitter
+from . import scanning_transform
+from .grain_fitter import GrainFitter
 
 class PeakMapper(object):
 

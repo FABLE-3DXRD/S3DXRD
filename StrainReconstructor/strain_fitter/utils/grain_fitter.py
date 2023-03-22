@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import leastsq
 from ImageD11 import parameters, grain, transform
 import copy
-import scanning_transform
+from . import scanning_transform
 
 class GrainFitter(object):
 
